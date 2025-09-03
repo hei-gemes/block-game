@@ -8,7 +8,18 @@ body{
 }
 .wrap{text-align:center}
 h1{margin:10px 0 8px;font-size:24px}
-canvas{background:#0b1222;border:1px solid #1f2937;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+canvas {
+  width: 100%;
+  height: auto;
+  max-width: 480px; /* PCではこれ以上大きくしない */
+  display: block;
+  margin: 0 auto;
+  background: #0b1222;
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  touch-action: none; /* スマホでのスクロール抑制 */
+}
 .ui{margin-top:8px}
 button{
   background:var(--panel);color:var(--text);border:1px solid #374151;border-radius:10px;
@@ -16,3 +27,8 @@ button{
 }
 button:hover{transform:translateY(-1px);border-color:var(--accent);box-shadow:0 8px 18px rgba(34,211,238,.25)}
 .hint{opacity:.7;font-size:12px;margin-top:6px}
+body, canvas, button {
+  -webkit-user-select: none; /* iPhone Safari用 */
+  -ms-user-select: none;     /* IE用（古いけど念のため） */
+  user-select: none;         /* 標準 */
+}
