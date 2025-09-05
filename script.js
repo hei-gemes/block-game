@@ -131,6 +131,11 @@ let ball = { x: CANVAS_W/2, y: CANVAS_H - 60, vx: 0, vy: 0, size: BALL_SIZE, stu
 let keys = { left:false, right:false };
 let playing = true;
 
+// モバイル用：押している間だけ左右移動の「仮想ボタン」方式
+let touchActive = false;   // 画面を押しているか
+let touchDir = 0;          // -1:左 / 0:停止 / 1:右
+let activePointerId = null;
+
 // =========================
 function resetRun(){
   level = 1;
@@ -210,22 +215,59 @@ document.addEventListener('keyup', (e)=>{
   if(e.key === 'ArrowRight') keys.right = false;
 });
 
-// タッチ/マウスでパドル追従 & タップで発射
+// マウス：従来どおり、位置に追従（デスクトップ用）
+canvas.addEventListener('pointerdown', (e)=>{
+  if(e.pointerType === 'mouse'){
+    const x = pointerPos(e);
+    paddle.x = clamp(x - paddle.w/2, 0, CANVAS_W - paddle.w);
+    if(ball.stuck) launchBall();
+  } else {
+    // タッチ：左右の仮想ボタン
+    startTouchControl(e);
+  }
+});
+canvas.addEventListener('pointermove', (e)=>{
+  if(e.pointerType === 'mouse'){
+    const x = pointerPos(e);
+    paddle.x = clamp(x - paddle.w/2, 0, CANVAS_W - paddle.w);
+  } else {
+    moveTouchControl(e);
+  }
+});
+canvas.addEventListener('pointerup', (e)=>{
+  if(e.pointerType !== 'mouse') endTouchControl(e);
+});
+canvas.addEventListener('pointercancel', (e)=>{
+  if(e.pointerType !== 'mouse') endTouchControl(e);
+});
+
 function pointerPos(e){
   const rect = canvas.getBoundingClientRect();
   const px = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
   return px * (canvas.width / rect.width);
 }
-canvas.addEventListener('pointerdown', (e)=>{
-  const x = pointerPos(e);
-  paddle.x = clamp(x - paddle.w/2, 0, CANVAS_W - paddle.w);
+
+function startTouchControl(e){
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+  touchActive = true;
+  activePointerId = e.pointerId;
+  touchDir = x < canvas.width/2 ? -1 : 1;
   if(ball.stuck) launchBall();
-});
-canvas.addEventListener('pointermove', (e)=>{
-  if(e.pressure === 0 && e.pointerType !== 'mouse') return; // 画面上を滑らせたときのみ
-  const x = pointerPos(e);
-  paddle.x = clamp(x - paddle.w/2, 0, CANVAS_W - paddle.w);
-});
+}
+function moveTouchControl(e){
+  if(!touchActive || e.pointerId !== activePointerId) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+  touchDir = x < canvas.width/2 ? -1 : 1;
+}
+function endTouchControl(e){
+  if(e.pointerId !== activePointerId) return;
+  touchActive = false;
+  activePointerId = null;
+  touchDir = 0;
+}
 
 // =========================
 // ゲーム制御
@@ -250,9 +292,14 @@ function launchBall(){
 function update(){
   if(!playing) return;
 
-  // パドル移動（キーボード）
+  // パドル移動
+  // 1) キーボード
   if(keys.left)  paddle.x -= PADDLE_SPEED;
   if(keys.right) paddle.x += PADDLE_SPEED;
+  // 2) タッチ（押している間だけ連続移動）
+  if(touchActive){
+    paddle.x += touchDir * (PADDLE_SPEED * 1.05);
+  }
   paddle.x = clamp(paddle.x, 0, CANVAS_W - paddle.w);
 
   // 時間経過で少しずつ加速
