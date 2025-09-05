@@ -2,7 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- ← ここがポイント！スマホズーム無効化 -->
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>ブロック崩し</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -22,7 +24,7 @@
       <button id="restart">リスタート</button>
     </div>
 
-    <p class="hint">← → キーで操作（スマホはタップで追従／タップで発射）</p>
+    <p class="hint">← → キーで操作（スマホは画面を押している間に左右移動 / 1タップで発射）</p>
   </main>
   <script src="script.js"></script>
 </body>
