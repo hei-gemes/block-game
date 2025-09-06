@@ -6,7 +6,7 @@ const CANVAS_H = 640;
 
 const PADDLE_W = 90;
 const PADDLE_H = 14;
-const PADDLE_SPEED = 7;
+const PADDLE_SPEED = 7;       // キーボード用の移動速度
 
 const BALL_SPEED = 5.2;        // 初速
 const BALL_SIZE = 8;
@@ -20,6 +20,10 @@ const BRICK_GAP = 4;      // ブロック間の隙間(px)
 const TOP_OFFSET = 80;    // 上端からの開始位置
 
 const START_LIVES = 3;
+
+// スマホ操作ゾーン（many Bricks 風）：
+// キャンバスの下側 ○% を「操作用余白」にする
+const CONTROL_ZONE_RATIO = 0.35; // 下から35%を操作ゾーンに
 
 // =========================
 // ユーティリティ
@@ -131,10 +135,10 @@ let ball = { x: CANVAS_W/2, y: CANVAS_H - 60, vx: 0, vy: 0, size: BALL_SIZE, stu
 let keys = { left:false, right:false };
 let playing = true;
 
-// モバイル用：押している間だけ左右移動の「仮想ボタン」方式
-let touchActive = false;   // 画面を押しているか
-let touchDir = 0;          // -1:左 / 0:停止 / 1:右
+// スマホのドラッグ操作（many Bricks 風）
+let dragging = false;
 let activePointerId = null;
+const CONTROL_ZONE_START_Y = CANVAS_H * (1 - CONTROL_ZONE_RATIO); // このYより下だけ操作有効
 
 // =========================
 function resetRun(){
@@ -215,58 +219,59 @@ document.addEventListener('keyup', (e)=>{
   if(e.key === 'ArrowRight') keys.right = false;
 });
 
-// マウス：従来どおり、位置に追従（デスクトップ用）
+// デスクトップ：マウスで追従
 canvas.addEventListener('pointerdown', (e)=>{
   if(e.pointerType === 'mouse'){
-    const x = pointerPos(e);
-    paddle.x = clamp(x - paddle.w/2, 0, CANVAS_W - paddle.w);
-    if(ball.stuck) launchBall();
-  } else {
-    // タッチ：左右の仮想ボタン
-    startTouchControl(e);
+    const {xCanvas, yCanvas} = canvasCoords(e);
+    if(yCanvas >= CONTROL_ZONE_START_Y){
+      paddle.x = clamp(xCanvas - paddle.w/2, 0, CANVAS_W - paddle.w);
+      if(ball.stuck) launchBall();
+    }
+  }else{
+    // タッチ：下の余白だけ有効
+    const {xCanvas, yCanvas} = canvasCoords(e);
+    if(yCanvas >= CONTROL_ZONE_START_Y){
+      dragging = true;
+      activePointerId = e.pointerId;
+      paddle.x = clamp(xCanvas - paddle.w/2, 0, CANVAS_W - paddle.w);
+      if(ball.stuck) launchBall();
+      e.preventDefault();
+    }
   }
 });
 canvas.addEventListener('pointermove', (e)=>{
   if(e.pointerType === 'mouse'){
-    const x = pointerPos(e);
-    paddle.x = clamp(x - paddle.w/2, 0, CANVAS_W - paddle.w);
-  } else {
-    moveTouchControl(e);
+    const {xCanvas, yCanvas} = canvasCoords(e);
+    if(yCanvas >= CONTROL_ZONE_START_Y){
+      paddle.x = clamp(xCanvas - paddle.w/2, 0, CANVAS_W - paddle.w);
+    }
+  }else{
+    if(!dragging || e.pointerId !== activePointerId) return;
+    const {xCanvas} = canvasCoords(e);
+    paddle.x = clamp(xCanvas - paddle.w/2, 0, CANVAS_W - paddle.w);
+    e.preventDefault();
   }
 });
 canvas.addEventListener('pointerup', (e)=>{
-  if(e.pointerType !== 'mouse') endTouchControl(e);
+  if(e.pointerType !== 'mouse' && e.pointerId === activePointerId){
+    dragging = false; activePointerId = null;
+    e.preventDefault();
+  }
 });
 canvas.addEventListener('pointercancel', (e)=>{
-  if(e.pointerType !== 'mouse') endTouchControl(e);
+  if(e.pointerType !== 'mouse' && e.pointerId === activePointerId){
+    dragging = false; activePointerId = null;
+  }
 });
 
-function pointerPos(e){
+function canvasCoords(e){
   const rect = canvas.getBoundingClientRect();
-  const px = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-  return px * (canvas.width / rect.width);
-}
-
-function startTouchControl(e){
-  e.preventDefault();
-  const rect = canvas.getBoundingClientRect();
-  const x = (e.clientX - rect.left) * (canvas.width / rect.width);
-  touchActive = true;
-  activePointerId = e.pointerId;
-  touchDir = x < canvas.width/2 ? -1 : 1;
-  if(ball.stuck) launchBall();
-}
-function moveTouchControl(e){
-  if(!touchActive || e.pointerId !== activePointerId) return;
-  const rect = canvas.getBoundingClientRect();
-  const x = (e.clientX - rect.left) * (canvas.width / rect.width);
-  touchDir = x < canvas.width/2 ? -1 : 1;
-}
-function endTouchControl(e){
-  if(e.pointerId !== activePointerId) return;
-  touchActive = false;
-  activePointerId = null;
-  touchDir = 0;
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    xCanvas: (e.clientX - rect.left) * scaleX,
+    yCanvas: (e.clientY - rect.top) * scaleY,
+  };
 }
 
 // =========================
@@ -292,14 +297,9 @@ function launchBall(){
 function update(){
   if(!playing) return;
 
-  // パドル移動
-  // 1) キーボード
+  // キーボード移動（スマホドラッグ時は上書き）
   if(keys.left)  paddle.x -= PADDLE_SPEED;
   if(keys.right) paddle.x += PADDLE_SPEED;
-  // 2) タッチ（押している間だけ連続移動）
-  if(touchActive){
-    paddle.x += touchDir * (PADDLE_SPEED * 1.05);
-  }
   paddle.x = clamp(paddle.x, 0, CANVAS_W - paddle.w);
 
   // 時間経過で少しずつ加速
@@ -426,6 +426,10 @@ function draw(){
   ctx.beginPath();
   ctx.arc(ball.x, ball.y, ball.size, 0, Math.PI*2);
   ctx.fill();
+
+  // 操作ゾーンのデバッグ表示（必要なら有効化）
+  // ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  // ctx.fillRect(0, CONTROL_ZONE_START_Y, canvas.width, canvas.height - CONTROL_ZONE_START_Y);
 
   if(!playing){
     ctx.fillStyle = 'rgba(0,0,0,.5)';
