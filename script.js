@@ -6,60 +6,56 @@ const CANVAS_H = 640;
 
 const PADDLE_W = 90;
 const PADDLE_H = 14;
-const PADDLE_SPEED = 7;       // キーボード用の移動速度
+const PADDLE_SPEED = 7;       // キーボード用移動速度
 
-const BALL_SPEED = 5.2;        // 初速
+const BALL_SPEED = 5.2;       // 初速
 const BALL_SIZE = 8;
-const MAX_BALL_SPEED = 9.5;    // 上限速度（加速でここまで上がる）
+const MAX_BALL_SPEED = 9.5;   // 時間加速の上限
 
-const MIN_ANGLE_DEG = 15;      // 反射後の最小角度（水平に近すぎるのを防ぐ）
-const ACCEL_INTERVAL_MS = 3000;// 何msごとに加速するか
-const ACCEL_STEP = 0.25;       // 1回の加速量（速さに加算）
+const MIN_ANGLE_DEG = 15;     // 反射後の最小角度（水平/垂直すぎ防止）
+const ACCEL_INTERVAL_MS = 3000;
+const ACCEL_STEP = 0.25;
 
-const BRICK_GAP = 4;      // ブロック間の隙間(px)
-const TOP_OFFSET = 80;    // 上端からの開始位置
+const BRICK_GAP = 4;
+const TOP_OFFSET = 80;
 
 const START_LIVES = 3;
 
-// スマホ操作ゾーン（many Bricks 風）：
-// キャンバスの下側 ○% を「操作用余白」にする
-const CONTROL_ZONE_RATIO = 0.35; // 下から35%を操作ゾーンに
+// many Bricks 風：キャンバス下の余白を操作ゾーンに
+const CONTROL_ZONE_RATIO = 0.35; // 下35%が操作ゾーン
 
 // =========================
 // ユーティリティ
 // =========================
 function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
-function randInt(min, max){ return (min + Math.floor(Math.random()*(max-min+1))); }
+function randInt(min, max){ return min + Math.floor(Math.random()*(max-min+1)); }
 function sign(n){ return n < 0 ? -1 : 1; }
 
-// 角度の下限を守りつつ、現在のball.speedに正規化
 function enforceAngleAndNormalize(ball){
   const speed = Math.hypot(ball.vx, ball.vy) || 1e-6;
   let vx = ball.vx / speed;
   let vy = ball.vy / speed;
 
   const minRad = (MIN_ANGLE_DEG * Math.PI) / 180;
-  const minSin = Math.sin(minRad); // |vy|の最小割合
-  const minCos = Math.cos(minRad); // |vx|の最小割合（垂直すぎ防止）
+  const minSin = Math.sin(minRad);
+  const minCos = Math.cos(minRad);
 
-  // 水平に近すぎるのを補正
+  // 水平に近すぎ → 縦成分を最低値まで入れる
   if(Math.abs(vy) < minSin){
     vy = sign(vy || 1) * minSin;
     vx = sign(vx || 1) * Math.sqrt(Math.max(0, 1 - vy*vy));
   }
-  // 垂直に近すぎるのも少しだけ補正（任意）
+  // 垂直に近すぎも少し補正（任意）
   if(Math.abs(vx) < (1 - minCos)){
     vx = sign(vx || 1) * Math.max(1 - minCos, Math.abs(vx));
-    const norm = Math.hypot(vx, vy);
-    vx /= norm; vy /= norm;
+    const n = Math.hypot(vx, vy);
+    vx /= n; vy /= n;
   }
 
-  // 目標速度に合わせる
   ball.vx = vx * ball.speed;
   ball.vy = vy * ball.speed;
 }
 
-// 現在の向きを保ったまま、ball.speedに合わせて速度ベクトルを正規化
 function normalizeToSpeed(ball){
   const sp = Math.hypot(ball.vx, ball.vy) || 1e-6;
   ball.vx = (ball.vx / sp) * ball.speed;
@@ -67,12 +63,10 @@ function normalizeToSpeed(ball){
 }
 
 // =========================
-// ステージ定義（0=空, 1=通常ブロック, 2=固めブロック）
-// 配列の行=上→下、列=左→右
-// いくつか形の違うパターンを用意
+// ステージ定義（0=空, 1=通常, 2=固い）
 // =========================
 const STAGES = [
-  // 1) ベーシック：上部びっしり
+  // 1) ベーシック
   [
     [1,1,1,1,1,1,1,1,1,1],
     [1,1,1,1,1,1,1,1,1,1],
@@ -86,7 +80,7 @@ const STAGES = [
     [1,0,1,0,1,0,1,0,1,0],
     [0,1,0,1,0,1,0,1,0,1],
   ],
-  // 3) 中央空洞（左右に壁）
+  // 3) 中央空洞
   [
     [1,1,1,0,0,0,0,1,1,1],
     [1,1,1,0,2,2,0,1,1,1],
@@ -123,14 +117,22 @@ let level = 1;
 let score = 0;
 let lives = START_LIVES;
 
-let bricks = [];     // {x,y,w,h,hp,alive}
-let cols = 0;
-let rows = 0;
-let brickW = 0;
-let brickH = 22;
+let bricks = []; // {x,y,w,h,hp,alive}
+let cols = 0, rows = 0;
+let brickW = 0, brickH = 22;
 
-let paddle = { x: CANVAS_W/2 - PADDLE_W/2, y: CANVAS_H - 40, w: PADDLE_W, h: PADDLE_H, vx: 0 };
-let ball = { x: CANVAS_W/2, y: CANVAS_H - 60, vx: 0, vy: 0, size: BALL_SIZE, stuck: true, speed: BALL_SPEED, lastSpeedUpAt: 0 };
+let paddle = {
+  x: CANVAS_W/2 - PADDLE_W/2,
+  y: CANVAS_H - 40,
+  w: PADDLE_W, h: PADDLE_H, vx: 0
+};
+
+let ball = {
+  x: CANVAS_W/2, y: CANVAS_H - 60,
+  vx: 0, vy: 0, size: BALL_SIZE,
+  stuck: true, speed: BALL_SPEED,
+  lastSpeedUpAt: 0
+};
 
 let keys = { left:false, right:false };
 let playing = true;
@@ -138,13 +140,11 @@ let playing = true;
 // スマホのドラッグ操作（many Bricks 風）
 let dragging = false;
 let activePointerId = null;
-const CONTROL_ZONE_START_Y = CANVAS_H * (1 - CONTROL_ZONE_RATIO); // このYより下だけ操作有効
+const CONTROL_ZONE_START_Y = CANVAS_H * (1 - CONTROL_ZONE_RATIO); // このYより下だけ有効
 
 // =========================
 function resetRun(){
-  level = 1;
-  score = 0;
-  lives = START_LIVES;
+  level = 1; score = 0; lives = START_LIVES;
   loadRandomStage();
   resetPaddleBall(true);
   playing = true;
@@ -158,8 +158,7 @@ function resetPaddleBall(stick=true){
 
   ball.x = paddle.x + paddle.w/2;
   ball.y = paddle.y - 10;
-  ball.vx = 0;
-  ball.vy = 0;
+  ball.vx = 0; ball.vy = 0;
   ball.speed = BALL_SPEED;
   ball.stuck = stick;
   ball.lastSpeedUpAt = performance.now();
@@ -179,19 +178,17 @@ function loadStageFromPattern(pattern){
   rows = pattern.length;
   cols = pattern[0].length;
 
-  // 横幅に合わせてブロック幅を決定（隙間分を引く）
   const totalGap = (cols - 1) * BRICK_GAP;
-  brickW = Math.floor((CANVAS_W - 40 - totalGap) / cols); // 左右に20pxずつ余白
+  brickW = Math.floor((CANVAS_W - 40 - totalGap) / cols); // 左右に20px余白
   const leftX = Math.floor((CANVAS_W - (brickW*cols + totalGap)) / 2);
 
   for(let r=0; r<rows; r++){
     for(let c=0; c<cols; c++){
       const cell = pattern[r][c];
       if(cell === 0) continue;
-
       const x = leftX + c * (brickW + BRICK_GAP);
       const y = TOP_OFFSET + r * (brickH + BRICK_GAP);
-      const hp = (cell === 2) ? 2 : 1; // 2=固め
+      const hp = (cell === 2) ? 2 : 1;
       bricks.push({ x, y, w: brickW, h: brickH, hp, alive: true });
     }
   }
@@ -208,25 +205,19 @@ function loadRandomStage(){
 document.addEventListener('keydown', (e)=>{
   if(e.key === 'ArrowLeft') keys.left = true;
   if(e.key === 'ArrowRight') keys.right = true;
-
-  // スペース or 上キーで発射
-  if((e.key === ' ' || e.key === 'ArrowUp') && ball.stuck){
-    launchBall();
-  }
+  if((e.key === ' ' || e.key === 'ArrowUp') && ball.stuck) launchBall();
 });
 document.addEventListener('keyup', (e)=>{
   if(e.key === 'ArrowLeft') keys.left = false;
   if(e.key === 'ArrowRight') keys.right = false;
 });
 
-// デスクトップ：マウスで追従
+// デスクトップ：マウスはどこでも追従
 canvas.addEventListener('pointerdown', (e)=>{
   if(e.pointerType === 'mouse'){
-    const {xCanvas, yCanvas} = canvasCoords(e);
-    if(yCanvas >= CONTROL_ZONE_START_Y){
-      paddle.x = clamp(xCanvas - paddle.w/2, 0, CANVAS_W - paddle.w);
-      if(ball.stuck) launchBall();
-    }
+    const {xCanvas} = canvasCoords(e);
+    paddle.x = clamp(xCanvas - paddle.w/2, 0, CANVAS_W - paddle.w);
+    if(ball.stuck) launchBall();
   }else{
     // タッチ：下の余白だけ有効
     const {xCanvas, yCanvas} = canvasCoords(e);
@@ -241,10 +232,8 @@ canvas.addEventListener('pointerdown', (e)=>{
 });
 canvas.addEventListener('pointermove', (e)=>{
   if(e.pointerType === 'mouse'){
-    const {xCanvas, yCanvas} = canvasCoords(e);
-    if(yCanvas >= CONTROL_ZONE_START_Y){
-      paddle.x = clamp(xCanvas - paddle.w/2, 0, CANVAS_W - paddle.w);
-    }
+    const {xCanvas} = canvasCoords(e);
+    paddle.x = clamp(xCanvas - paddle.w/2, 0, CANVAS_W - paddle.w);
   }else{
     if(!dragging || e.pointerId !== activePointerId) return;
     const {xCanvas} = canvasCoords(e);
@@ -280,8 +269,8 @@ function canvasCoords(e){
 $restart.addEventListener('click', resetRun);
 
 function launchBall(){
-  // 斜め上に発射（パドル中心からの相対で多少角度がつく）
-  const rel = ( (ball.x - (paddle.x + paddle.w/2)) / (paddle.w/2) );
+  // パドル位置から角度付けて発射
+  const rel = ((ball.x - (paddle.x + paddle.w/2)) / (paddle.w/2));
   const angle = (-Math.PI/3) + (rel * Math.PI/6); // -60°±30°
   ball.speed = BALL_SPEED;
   ball.vx = Math.cos(angle) * ball.speed;
@@ -292,17 +281,15 @@ function launchBall(){
 }
 
 // =========================
-// 更新
-// =========================
 function update(){
   if(!playing) return;
 
-  // キーボード移動（スマホドラッグ時は上書き）
+  // キーボード移動
   if(keys.left)  paddle.x -= PADDLE_SPEED;
   if(keys.right) paddle.x += PADDLE_SPEED;
   paddle.x = clamp(paddle.x, 0, CANVAS_W - paddle.w);
 
-  // 時間経過で少しずつ加速
+  // 経時加速
   if(!ball.stuck){
     const now = performance.now();
     if(now - ball.lastSpeedUpAt >= ACCEL_INTERVAL_MS){
@@ -312,7 +299,7 @@ function update(){
     }
   }
 
-  // ボール（吸着中はパドルに追従）
+  // ボール更新
   if(ball.stuck){
     ball.x = paddle.x + paddle.w/2;
     ball.y = paddle.y - 10;
@@ -330,7 +317,6 @@ function update(){
   if(ball.y + ball.size >= paddle.y &&
      ball.y + ball.size <= paddle.y + paddle.h &&
      ball.x >= paddle.x && ball.x <= paddle.x + paddle.w && ball.vy > 0){
-    // 当たった位置で角度変更
     const hitPos = (ball.x - (paddle.x + paddle.w/2)) / (paddle.w/2);
     const angle = (-Math.PI/3) + (hitPos * Math.PI/3); // -60°〜+60°
     ball.vx = Math.sin(angle) * ball.speed;
@@ -344,7 +330,7 @@ function update(){
     if(ball.x + ball.size < b.x || ball.x - ball.size > b.x + b.w ||
        ball.y + ball.size < b.y || ball.y - ball.size > b.y + b.h) continue;
 
-    // どの面に当たったかざっくり判定
+    // ざっくり接触面
     const prevX = ball.x - ball.vx;
     const prevY = ball.y - ball.vy;
     const fromLeft   = prevX <= b.x;
@@ -357,18 +343,12 @@ function update(){
     }else{
       ball.vy *= -1;
     }
-
-    // 角度と速度を補正
     enforceAngleAndNormalize(ball);
 
-    // ブロックダメージ
+    // ダメージ
     b.hp -= 1;
-    if(b.hp <= 0){
-      b.alive = false;
-      score += 10;
-    }else{
-      score += 3; // 固いブロックに当てたボーナス
-    }
+    if(b.hp <= 0){ b.alive = false; score += 10; }
+    else { score += 3; }
     updateHUD();
     break;
   }
@@ -379,16 +359,13 @@ function update(){
     updateHUD();
     if(lives <= 0){
       playing = false;
-      // 簡易ゲームオーバー表示
-      setTimeout(()=>{
-        alert('ゲームオーバー！');
-      }, 50);
+      setTimeout(()=>alert('ゲームオーバー！'), 50);
     }else{
-      resetPaddleBall(true); // 再吸着から
+      resetPaddleBall(true);
     }
   }
 
-  // クリア判定（全ブロック破壊）
+  // クリア（全破壊）
   if(bricks.every(b => !b.alive)){
     level += 1;
     updateHUD();
@@ -398,22 +375,14 @@ function update(){
 }
 
 // =========================
-// 描画
-// =========================
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
   // ブロック
   for(const b of bricks){
     if(!b.alive) continue;
-    // hpで色を変える
-    if(b.hp >= 2){
-      ctx.fillStyle = '#60a5fa'; // 2段ブロック（青系）
-      ctx.strokeStyle = '#2563eb';
-    }else{
-      ctx.fillStyle = '#22d3ee'; // 通常（シアン）
-      ctx.strokeStyle = '#0891b2';
-    }
+    if(b.hp >= 2){ ctx.fillStyle = '#60a5fa'; ctx.strokeStyle = '#2563eb'; }
+    else         { ctx.fillStyle = '#22d3ee'; ctx.strokeStyle = '#0891b2'; }
     roundRect(ctx, b.x, b.y, b.w, b.h, 6, true, true);
   }
 
@@ -427,7 +396,7 @@ function draw(){
   ctx.arc(ball.x, ball.y, ball.size, 0, Math.PI*2);
   ctx.fill();
 
-  // 操作ゾーンのデバッグ表示（必要なら有効化）
+  // （デバッグ用）操作ゾーン可視化したい時はコメント解除
   // ctx.fillStyle = 'rgba(255,255,255,0.04)';
   // ctx.fillRect(0, CONTROL_ZONE_START_Y, canvas.width, canvas.height - CONTROL_ZONE_START_Y);
 
@@ -456,13 +425,7 @@ function roundRect(ctx, x, y, w, h, r, fill, stroke){
 }
 
 // =========================
-// ループ
-// =========================
-function loop(){
-  update();
-  draw();
-  requestAnimationFrame(loop);
-}
+function loop(){ update(); draw(); requestAnimationFrame(loop); }
 
 // 初期化
 resetRun();
