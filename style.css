@@ -1,56 +1,91 @@
-:root{
-  --bg:#0f172a;--panel:#111827;--text:#e5e7eb;--accent:#22d3ee;
-}
-*{box-sizing:border-box}
-html,body{height:100%}
-body{
-  margin:0;display:grid;place-items:center;
-  background:linear-gradient(180deg,#0b1023,#0f172a);
-  color:var(--text);
-  font-family:system-ui,-apple-system,"Segoe UI","Hiragino Sans",Arial;
+* { box-sizing: border-box; }
+html, body {
+  height: 100%;
+  margin: 0;
+  background: #0c0f14;
+  color: #e6edf3;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Hiragino Sans", "Hiragino Kaku Gothic ProN", Meiryo, "Noto Sans JP", sans-serif;
 }
 
-.wrap{text-align:center}
-h1{margin:10px 0 8px;font-size:24px}
-
-.hud{
-  display:flex;gap:12px;justify-content:center;
-  opacity:.9;margin-bottom:6px;font-size:14px;
-}
-.hud div{
-  background:rgba(17,24,39,.6);
-  border:1px solid #374151;border-radius:10px;
-  padding:6px 10px;min-width:110px;
+.wrap {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
 }
 
-canvas {
+/* HUD */
+.hud {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border: 1px solid #1f2630;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #141922, #0f131a);
+  box-shadow: 0 1px 8px rgba(0,0,0,.25) inset;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.game {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* 👇 Safariでも確実に高さが出る指定（aspect-ratioは使わない） */
+.game-parent {
+  position: relative;
   width: 100%;
-  height: auto;
-  max-width: 96vw;
-  display: block;
-  margin: 0 auto;
-  background:#0b1222;
-  border:1px solid #1f2937;
-  border-radius:12px;
-  box-shadow:0 10px 30px rgba(0,0,0,.25);
-  touch-action:none;
+  height: 70vh;                      /* 画面の70%をゲーム領域に */
+  max-height: calc(100vh - 220px);   /* HUD/フッターぶんの余白 */
+  min-height: 520px;                 /* 小さい画面でも潰れない最低高 */
+  border: 1px solid #1f2630;
+  border-radius: 12px;
+  background: radial-gradient(120% 120% at 50% 0%, #162033 0%, #0d121a 60%, #0a0f15 100%);
+  overflow: hidden;
 }
 
-.ui{margin-top:8px}
-button{
-  background:var(--panel);color:var(--text);
-  border:1px solid #374151;border-radius:10px;
-  padding:8px 14px;cursor:pointer;transition:.15s;
-}
-button:hover{
-  transform:translateY(-1px);
-  border-color:var(--accent);
-  box-shadow:0 8px 18px rgba(34,211,238,.25);
-}
-.hint{opacity:.7;font-size:12px;margin-top:6px}
-
-body, canvas, button {
+/* iPhone用スワイプ操作ゾーン */
+#touchZone {
+  touch-action: none;
   -webkit-user-select: none;
-  -ms-user-select: none;
   user-select: none;
+  height: 22vh;
+  min-height: 110px;
+  border: 1px dashed #2a3444;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #0e131b, #0a0f15);
+  display: grid;
+  place-items: center;
+  opacity: .9;
 }
+#touchZone .hint {
+  font-size: 0.9rem;
+  color: #9fb3c8;
+  opacity: .9;
+}
+
+.footer {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  appearance: none;
+  background: #1e88e5;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+button#btnPause { background: #546e7a; }
+button:active { transform: translateY(1px); }

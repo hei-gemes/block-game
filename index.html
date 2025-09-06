@@ -1,33 +1,40 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <!-- スマホでの意図しないズーム・ダブルタップズームを無効化 -->
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>ブロック崩し</title>
+  <meta charset="utf-8" />
+  <title>Rogue Breaker (Phaser Proto)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <!-- 👇 ファイル名を style.css に統一 -->
   <link rel="stylesheet" href="style.css" />
+  <!-- Phaser本体（そのままでOK） -->
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.0/dist/phaser.min.js"></script>
 </head>
 <body>
-  <main class="wrap">
-    <h1>ブロック崩し</h1>
+  <div class="wrap">
+    <header class="hud">
+      <div>🏆 スコア: <span id="score">0</span></div>
+      <div>❤️ ライフ: <span id="lives">3</span></div>
+      <div>🗺️ ステージ: <span id="stage">1</span></div>
+      <div>⏱️ 経過: <span id="elapsed">00:00</span></div>
+    </header>
 
-    <div class="hud">
-      <div>ステージ: <span id="stage">1</span></div>
-      <div>スコア: <span id="score">0</span></div>
-      <div>ライフ: <span id="lives">3</span></div>
-    </div>
+    <main class="game">
+      <!-- Phaserのキャンバスはここに出ます -->
+      <div id="gameParent" class="game-parent" aria-label="ゲーム領域"></div>
 
-    <canvas id="game" width="480" height="640"></canvas>
+      <!-- iPhone向けスワイプ操作ゾーン -->
+      <div id="touchZone" aria-label="スワイプ操作エリア">
+        <div class="hint">← 指で左右にスワイプして操作（iPhone想定） →</div>
+      </div>
+    </main>
 
-    <div class="ui">
-      <button id="restart">リスタート</button>
-    </div>
+    <footer class="footer">
+      <button id="btnStart">▶︎ スタート / リスタート</button>
+      <button id="btnPause">⏸ 一時停止</button>
+    </footer>
+  </div>
 
-    <p class="hint">← → キーで操作（スマホは画面下の余白ゾーンをドラッグ / 1タップで発射）</p>
-  </main>
-
-  <!-- キャッシュ破り用クエリつき -->
-  <script src="script.js?v=mb4"></script>
+  <script defer src="script.js"></script>
 </body>
 </html>
