@@ -1,40 +1,43 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <title>Rogue Breaker (Phaser Proto)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <!-- 👇 ファイル名を style.css に統一 -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ブロック崩し</title>
   <link rel="stylesheet" href="style.css" />
-  <!-- Phaser本体（そのままでOK） -->
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.0/dist/phaser.min.js"></script>
 </head>
 <body>
-  <div class="wrap">
-    <header class="hud">
-      <div>🏆 スコア: <span id="score">0</span></div>
-      <div>❤️ ライフ: <span id="lives">3</span></div>
-      <div>🗺️ ステージ: <span id="stage">1</span></div>
-      <div>⏱️ 経過: <span id="elapsed">00:00</span></div>
-    </header>
+  <header class="hud">
+    <div>🎯 スコア: <span id="score">0</span></div>
+    <div>❤️ ライフ: <span id="lives">3</span></div>
+    <div>🧱 レベル: <span id="level">1</span></div>
+  </header>
 
-    <main class="game">
-      <!-- Phaserのキャンバスはここに出ます -->
-      <div id="gameParent" class="game-parent" aria-label="ゲーム領域"></div>
+  <main class="stage">
+    <div class="canvas-wrap">
+      <canvas id="game" width="480" height="640"></canvas>
 
-      <!-- iPhone向けスワイプ操作ゾーン -->
-      <div id="touchZone" aria-label="スワイプ操作エリア">
-        <div class="hint">← 指で左右にスワイプして操作（iPhone想定） →</div>
+      <!-- キャンバス上に中央固定されるオーバーレイ -->
+      <div id="overlay" class="overlay">
+        <div class="panel">
+          <h1 id="titleText">ブロック崩し</h1>
+          <p class="msg" id="descText">左右キー / マウス / タッチ で操作</p>
+          <div class="row">
+            <button id="btnStart" class="btn">ゲーム開始</button>
+            <button id="btnPause" class="btn" hidden>一時停止 ⏸</button>
+            <button id="btnResume" class="btn" hidden>再開 ▶︎</button>
+            <button id="btnReset" class="btn btn-outline" hidden>リセット ↺</button>
+          </div>
+          <small>ヒント: 「P」キーで一時停止/再開</small>
+        </div>
       </div>
-    </main>
+    </div>
+  </main>
 
-    <footer class="footer">
-      <button id="btnStart">▶︎ スタート / リスタート</button>
-      <button id="btnPause">⏸ 一時停止</button>
-    </footer>
-  </div>
+  <footer class="tips">
+    <span>操作: ← → キー / マウス移動 / スワイプ</span>
+  </footer>
 
-  <script defer src="script.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>

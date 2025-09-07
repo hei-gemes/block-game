@@ -1,384 +1,288 @@
-// Phaser 3 プロト：ブロック崩し（iPhoneスワイプ対応 / HUD / クリア＆ゲームオーバー）
-// ここから増築して「3択アイテム」「ドロップ」「マップ分岐」「ボス」へ拡張できます。
-
+// ====== ブロック崩し（安定版） ======
 (() => {
-  // ========= DOM参照（HUD / ボタン / スワイプゾーン） =========
-  const hud = {
-    score: document.getElementById("score"),
-    lives: document.getElementById("lives"),
-    stage: document.getElementById("stage"),
-    elapsed: document.getElementById("elapsed"),
-  };
+  const cvs = document.getElementById("game");
+  const ctx = cvs.getContext("2d");
+
+  // UI
+  const elScore = document.getElementById("score");
+  const elLives = document.getElementById("lives");
+  const elLevel = document.getElementById("level");
+  const overlay = document.getElementById("overlay");
+  const titleText = document.getElementById("titleText");
+  const descText  = document.getElementById("descText");
   const btnStart = document.getElementById("btnStart");
   const btnPause = document.getElementById("btnPause");
-  const touchZone = document.getElementById("touchZone");
+  const btnResume = document.getElementById("btnResume");
+  const btnReset = document.getElementById("btnReset");
 
-  // ========= 定数 =========
-  const VIEW_W = 800;
-  const VIEW_H = 1000;
+  // 基本設定
+  const BASE_W = 480, BASE_H = 640, RATIO = BASE_H / BASE_W;
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const PADDLE_W0 = 80, PADDLE_H = 12;
+  const BALL_SPEED0 = 260;
+  const LIVES_MAX = 3;
 
-  const GameState = {
-    INIT: "INIT",
-    READY: "READY",
-    PLAY: "PLAY",
-    PAUSE: "PAUSE",
-    CLEAR: "CLEAR",
-    OVER: "OVER",
-  };
+  // 状態
+  let running = false, paused = false;
+  let level = 1, score = 0, lives = LIVES_MAX;
+  let last = 0;                   // 直前フレームの時刻
+  let keys = { left:false, right:false };
+  let pointerX = null;
 
-  // ========= ゲーム全体ステート =========
-  let state = GameState.INIT;
-  let score = 0;
-  let lives = 3;
-  let stage = 1;
-  let runStartMs = 0;
+  // エンティティ
+  const paddle = { x:0, y:0, w:PADDLE_W0, h:PADDLE_H, speed:480 };
+  const ball   = { x:0, y:0, r:7, vx:0, vy:0, speed:BALL_SPEED0 };
+  let bricks = [];
 
-  // ========= 入力（スワイプで狙うX座標） =========
-  let targetX = VIEW_W / 2;
+  // -------- レイアウトと初期化 --------
+  function resizeCanvas() {
+    // CSS幅に合わせて内部解像度を調整（常に縦長比率を維持）
+    const cssW = cvs.clientWidth || cvs.getBoundingClientRect().width || BASE_W;
+    const cssH = Math.round(cssW * RATIO);
+    cvs.style.height = cssH + "px";
+    cvs.width  = Math.round(cssW * DPR);
+    cvs.height = Math.round(cssH * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
-  // ========= Phaser コンフィグ =========
-  const config = {
-    type: Phaser.AUTO,
-    parent: "gameParent",
-    width: VIEW_W,
-    height: VIEW_H,
-    backgroundColor: "#0b0f15",
-    physics: {
-      default: "arcade",
-      arcade: {
-        gravity: { y: 0 },
-        debug: false
-      }
-    },
-    scale: {
-      mode: Phaser.Scale.FIT,
-      autoCenter: Phaser.Scale.CENTER_BOTH
-    },
-    scene: [MainScene]
-  };
-
-  const game = new Phaser.Game(config);
-
-  // ========= シーン定義 =========
-  function MainScene() {
-    Phaser.Scene.call(this, { key: "MainScene" });
+    if (!running) { // タイトル中は見た目だけ整える
+      paddle.x = (cssW - paddle.w) / 2;
+      paddle.y = cssH - 40;
+      ball.x = cssW / 2;
+      ball.y = cssH - 60;
+      buildLevel(level, cssW);
+      draw();
+    } else {
+      paddle.y = cssH - 40;
+      buildLevel(level, cssW);
+    }
   }
-  MainScene.prototype = Object.create(Phaser.Scene.prototype);
-  MainScene.prototype.constructor = MainScene;
 
-  MainScene.prototype.preload = function () {
-    // 画像アセットを使う場合はここで読み込み
-    // 今はシェイプ描画中心なので不要
-  };
+  function buildLevel(n, widthCss) {
+    const cols = 8;
+    const rows = Math.min(4 + n, 10);
+    const margin = 8;
+    const top = 70;
+    const brickW = (widthCss - margin * (cols + 1)) / cols;
+    const brickH = 20;
 
-  MainScene.prototype.create = function () {
-    const scene = this;
-
-    // ワールド境界（ボールが下に抜けてもイベントで処理するので、collideWorldBoundsは上左右のみ有効）
-    scene.physics.world.setBounds(0, 0, VIEW_W, VIEW_H);
-
-    // パドル
-    scene.paddle = scene.add.rectangle(VIEW_W / 2, VIEW_H - 140, 140, 18, 0x4fc3f7).setOrigin(0.5);
-    scene.physics.add.existing(scene.paddle, true); // 静的ボディ（動かす時はsetXで）
-
-    // ボール
-    scene.ball = scene.add.circle(VIEW_W / 2, VIEW_H / 2 + 120, 10, 0xe3f2fd);
-    scene.physics.add.existing(scene.ball);
-    scene.ball.body.setCollideWorldBounds(true, 1, 1);
-    scene.ball.body.onWorldBounds = true; // worldboundsイベント受け取り
-    scene.ballStuck = true; // スタートまでパドルに吸着
-
-    // ブロック（グループ）
-    scene.bricks = scene.physics.add.staticGroup();
-    setupBricks(scene);
-
-    // 物理衝突
-    scene.physics.add.collider(scene.ball, scene.paddle, onHitPaddle, null, scene);
-    scene.physics.add.collider(scene.ball, scene.bricks, onHitBrick, null, scene);
-
-    // 下抜け判定（WorldBounds）：下に抜けたらライフ減少
-    scene.physics.world.on("worldbounds", (body, up, down) => {
-      if (down) {
-        onBallFall(scene);
-      }
-    });
-
-    // 画面メッセージ
-    scene.message = scene.add.text(VIEW_W / 2, VIEW_H / 2, "タップまたは▶︎で開始", {
-      fontSize: "28px",
-      color: "#cbd6e2",
-      fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial'
-    }).setOrigin(0.5);
-
-    // Canvas上のタップでも開始
-    scene.input.on("pointerdown", () => {
-      if (state === GameState.READY) startOrRestart(scene);
-    });
-
-    // DOMボタン
-    btnStart.addEventListener("click", () => {
-      if (state === GameState.CLEAR) {
-        nextStage(scene);
-      } else {
-        startOrRestart(scene);
-      }
-    });
-    btnPause.addEventListener("click", () => pauseToggle(scene));
-
-    // スワイプゾーン（iPhone想定）
-    bindTouchZone();
-
-    // PCマウス用：キャンバス上でのマウス移動もOK
-    scene.input.on("pointermove", (pointer) => {
-      // pointer.x/y は画面スケール後座標。パドルのローカルXへそのまま利用可
-      targetX = Phaser.Math.Clamp(pointer.x, 0, VIEW_W);
-    });
-
-    // 初期化
-    hardReset(scene);
-    scene.time.addEvent({
-      delay: 100, loop: true,
-      callback: () => updateHUDElapsed()
-    });
-  };
-
-  MainScene.prototype.update = function () {
-    const scene = this;
-    if (state !== GameState.PLAY) {
-      // 吸着中はパドルの上にボールを追従
-      if (scene.ballStuck) {
-        stickBallToPaddle(scene);
-      }
-      return;
-    }
-
-    // パドルをtargetXに追従（速度制限）
-    const speed = 12;
-    const dx = targetX - scene.paddle.x;
-    const step = Phaser.Math.Clamp(dx, -speed, speed);
-    scene.paddle.x = Phaser.Math.Clamp(scene.paddle.x + step, scene.paddle.width / 2, VIEW_W - scene.paddle.width / 2);
-    scene.paddle.body.updateFromGameObject();
-
-    // 吸着中なら追従
-    if (scene.ballStuck) {
-      stickBallToPaddle(scene);
-    }
-
-    // ステージクリア判定
-    if (isStageCleared(scene)) {
-      state = GameState.CLEAR;
-      scene.message.setText("ステージクリア！ ▶︎で次へ");
-      scene.message.setVisible(true);
-      scene.ball.body.setVelocity(0, 0);
-      scene.ballStuck = true;
-    }
-  };
-
-  // ========= ユーティリティ & ロジック =========
-  function setupBricks(scene) {
-    // レイアウト計算
-    const rows = 6;
-    const cols = 10;
-    const padX = 16, padY = 20;
-    const mTop = 120, mSide = 20;
-    const w = Math.floor((VIEW_W - mSide * 2 - padX * (cols - 1)) / cols);
-    const h = 28;
-
-    scene.bricks.clear(true, true);
+    bricks = [];
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const x = mSide + c * (w + padX) + w / 2;
-        const y = mTop + r * (h + padY) + h / 2;
-        const color = (r >= 4) ? 0xff7043 : (r >= 2 ? 0xffd54f : 0x9ccc65);
-        const rect = scene.add.rectangle(x, y, w, h, color).setStrokeStyle(2, 0x1a1f28);
-        const brick = scene.bricks.add(rect);
-        brick.hp = 1 + Math.floor(r / 2); // 下ほどHP高め
+        const hp = 1 + Math.floor((n - 1) / 2);
+        bricks.push({
+          x: margin + c * (brickW + margin),
+          y: top + r * (brickH + margin),
+          w: brickW, h: brickH, hp,
+          color: `hsl(${(c*32 + r*14)%360} 70% 55%)`,
+        });
       }
     }
-    scene.bricks.refresh();
   }
 
-  function onHitPaddle(ball, paddle) {
-    const scene = this;
-    // 衝突点ベースで角度変化
-    const rel = (ball.x - paddle.x) / (paddle.width / 2); // -1~1
-    const angle = Phaser.Math.DegToRad(rel * 60); // 最大60度
-    const speed = Math.min(Math.hypot(ball.body.velocity.x, ball.body.velocity.y) * 1.02, 600);
+  function resetBallAndPaddle() {
+    const w = cvs.width / DPR, h = cvs.height / DPR;
+    paddle.w = Math.max(56, PADDLE_W0 - (level-1)*4);
+    paddle.x = (w - paddle.w) / 2;
+    paddle.y = h - 40;
 
-    ball.body.setVelocity(
-      Math.sin(angle) * speed,
-      -Math.abs(Math.cos(angle) * speed)
-    );
+    ball.x = w / 2;
+    ball.y = h - 60;
+    const deg = -60 + Math.random()*120;              // -60°〜60°
+    const speed = (BALL_SPEED0 + (level-1)*28);
+    ball.vx = Math.sin(deg * Math.PI/180) * speed;
+    ball.vy = -Math.abs(Math.cos(deg * Math.PI/180) * speed); // 必ず上向き
   }
 
-  function onHitBrick(ball, brick) {
-    const scene = this;
-    // HP制
-    brick.hp -= 1;
-    if (brick.hp <= 0) {
-      brick.destroy(true);
-      score += 10;
+  // -------- 入力 --------
+  addEventListener("keydown", e => {
+    if (e.key === "ArrowLeft")  keys.left = true;
+    if (e.key === "ArrowRight") keys.right = true;
+    if (e.key.toLowerCase() === "p") togglePause();
+  });
+  addEventListener("keyup", e => {
+    if (e.key === "ArrowLeft")  keys.left = false;
+    if (e.key === "ArrowRight") keys.right = false;
+  });
+  cvs.addEventListener("mousemove", e => {
+    const r = cvs.getBoundingClientRect(); pointerX = e.clientX - r.left;
+  });
+  cvs.addEventListener("mouseleave", () => pointerX = null);
+  cvs.addEventListener("touchstart", e => {
+    const r = cvs.getBoundingClientRect(); pointerX = e.touches[0].clientX - r.left;
+  }, {passive:true});
+  cvs.addEventListener("touchmove", e => {
+    const r = cvs.getBoundingClientRect(); pointerX = e.touches[0].clientX - r.left;
+  }, {passive:true});
+  cvs.addEventListener("touchend", () => pointerX = null);
+
+  // -------- UI --------
+  btnStart.addEventListener("click", startGame);
+  btnPause.addEventListener("click", () => togglePause(true));
+  btnResume.addEventListener("click", () => togglePause(false));
+  btnReset.addEventListener("click", hardReset);
+  addEventListener("resize", resizeCanvas);
+
+  function updateHUD(){ elScore.textContent = score; elLives.textContent = lives; elLevel.textContent = level; }
+  function showOverlay(show, title, desc){
+    if (show) {
+      titleText.textContent = title ?? "ブロック崩し";
+      descText.textContent  = desc  ?? "左右キー / マウス / タッチ で操作";
+      overlay.classList.remove("hidden");
     } else {
-      score += 2;
-      // 色段階を簡易更新（任意）
-      brick.fillColor = (brick.hp >= 3) ? 0xff7043 : (brick.hp === 2 ? 0xffd54f : 0x9ccc65);
+      overlay.classList.add("hidden");
     }
-    hud.score.textContent = score;
   }
 
-  function onBallFall(scene) {
-    if (state !== GameState.PLAY && state !== GameState.READY) return;
-    // 画面下に落下
-    lives -= 1;
-    hud.lives.textContent = lives;
+  function startGame(){
+    running = true; paused = false;
+    btnStart.hidden = true; btnPause.hidden = false; btnResume.hidden = true; btnReset.hidden = false;
+    level = 1; score = 0; lives = LIVES_MAX; updateHUD();
+    showOverlay(false);
+    resizeCanvas();
+    resetBallAndPaddle();
+    last = performance.now();
+    requestAnimationFrame(loop);
+  }
 
-    if (lives <= 0) {
-      state = GameState.OVER;
-      scene.message.setText("ゲームオーバー ▶︎で再スタート");
-      scene.message.setVisible(true);
-      scene.ball.body.setVelocity(0, 0);
-      scene.ballStuck = true;
+  function hardReset(){
+    running = false; paused = false;
+    btnStart.hidden = false; btnPause.hidden = true; btnResume.hidden = true; btnReset.hidden = true;
+    showOverlay(true, "ブロック崩し", "左右キー / マウス / タッチ で操作");
+    resizeCanvas(); draw();
+  }
+
+  function togglePause(forcePause){
+    if (!running) return;
+    const willPause = typeof forcePause === "boolean" ? forcePause : !paused;
+    paused = willPause;
+    btnPause.hidden = paused; btnResume.hidden = !paused;
+    showOverlay(paused, "一時停止中…", `スコア: ${score} / レベル: ${level}`);
+    if (!paused){ last = performance.now(); requestAnimationFrame(loop); }
+  }
+
+  // -------- ループ --------
+  function loop(ts){
+    if (!running || paused) return;
+    const dt = Math.min((ts - last)/1000, 0.033);
+    last = ts;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function update(dt){
+    const w = cvs.width / DPR, h = cvs.height / DPR;
+
+    // パドル
+    if (pointerX != null){
+      const target = Math.max(0, Math.min(w - paddle.w, pointerX - paddle.w/2));
+      paddle.x += (target - paddle.x) * Math.min(1, dt * 12);
     } else {
-      // 再開用に吸着
-      scene.ballStuck = true;
-      stickBallToPaddle(scene);
-      scene.ball.body.setVelocity(0, 0);
+      if (keys.left)  paddle.x -= paddle.speed * dt;
+      if (keys.right) paddle.x += paddle.speed * dt;
+      paddle.x = Math.max(0, Math.min(w - paddle.w, paddle.x));
+    }
+
+    // ボール
+    ball.x += ball.vx * dt; ball.y += ball.vy * dt;
+
+    // 壁
+    if (ball.x - ball.r < 0){ ball.x = ball.r; ball.vx *= -1; }
+    if (ball.x + ball.r > w){ ball.x = w - ball.r; ball.vx *= -1; }
+    if (ball.y - ball.r < 0){ ball.y = ball.r; ball.vy *= -1; }
+
+    // パドル衝突
+    if (rectCircleCollide(paddle, ball)){
+      const hit = (ball.x - (paddle.x + paddle.w/2)) / (paddle.w/2); // -1〜1
+      const angle = clamp(hit, -0.95, 0.95) * (Math.PI/3);           // ±60°
+      const speed = Math.hypot(ball.vx, ball.vy) * 1.02;
+      ball.vx = Math.sin(angle) * speed;
+      ball.vy = -Math.abs(Math.cos(angle) * speed);
+      ball.y = paddle.y - ball.r - 0.1;
+    }
+
+    // ブロック衝突
+    for (let i = bricks.length - 1; i >= 0; i--){
+      const b = bricks[i]; if (b.hp <= 0) continue;
+      if (rectCircleCollide(b, ball)){
+        // 当たった面をだいたいで判断
+        const prevX = ball.x - ball.vx*dt, prevY = ball.y - ball.vy*dt;
+        const fromX = prevX < b.x || prevX > b.x + b.w;
+        const fromY = prevY < b.y || prevY > b.y + b.h;
+        if (fromX) ball.vx *= -1;
+        if (fromY) ball.vy *= -1;
+        b.hp -= 1; score += 10;
+      }
+    }
+
+    // 落下
+    if (ball.y - ball.r > h){
+      lives -= 1; updateHUD();
+      if (lives <= 0){ return gameOver(false); }
+      resetBallAndPaddle();
+    }
+
+    // クリア
+    if (bricks.every(b => b.hp <= 0)){
+      level += 1; score += 100; updateHUD();
+      buildLevel(level, w); resetBallAndPaddle();
     }
   }
 
-  function stickBallToPaddle(scene) {
-    scene.ball.x = scene.paddle.x;
-    scene.ball.y = scene.paddle.y - (scene.ball.radius + 2);
-  }
+  function draw(){
+    const w = cvs.width / DPR, h = cvs.height / DPR;
 
-  function isStageCleared(scene) {
-    // すべて破壊済みならtrue
-    let alive = 0;
-    scene.bricks.children.iterate(b => { if (b && b.active) alive++; });
-    return alive === 0;
-  }
+    // 背景
+    const g = ctx.createLinearGradient(0,0,0,h);
+    g.addColorStop(0,"#081029"); g.addColorStop(1,"#0b1436");
+    ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
 
-  function hardReset(scene) {
-    score = 0;
-    lives = 3;
-    stage = 1;
-    hud.score.textContent = score;
-    hud.lives.textContent = lives;
-    hud.stage.textContent = stage;
-    runStartMs = performance.now();
-
-    // 初期配置
-    scene.paddle.setSize(140, 18);
-    scene.paddle.setPosition(VIEW_W / 2, VIEW_H - 140);
-    scene.paddle.body.updateFromGameObject();
-
-    scene.ball.setPosition(VIEW_W / 2, VIEW_H / 2 + 120);
-    scene.ball.body.setVelocity(0, 0);
-    scene.ball.body.setBounce(1, 1);
-    scene.ball.body.setCollideWorldBounds(true, 1, 1);
-
-    setupBricks(scene);
-
-    state = GameState.READY;
-    scene.ballStuck = true;
-    scene.message.setText("タップまたは▶︎で開始");
-    scene.message.setVisible(true);
-  }
-
-  function startOrRestart(scene) {
-    if (state === GameState.PLAY) return;
-
-    if (state === GameState.INIT) {
-      hardReset(scene);
-    } else if (state === GameState.OVER) {
-      hardReset(scene);
+    // ブロック
+    for (const b of bricks){
+      if (b.hp <= 0) continue;
+      ctx.fillStyle = b.color; ctx.fillRect(b.x,b.y,b.w,b.h);
+      ctx.fillStyle = "rgba(255,255,255,.18)"; ctx.fillRect(b.x,b.y,b.w,4);
     }
 
-    state = GameState.PLAY;
-    scene.message.setVisible(false);
-    scene.ballStuck = false;
-    // 初速
-    const vx = Phaser.Math.RND.sign() * 260;
-    const vy = -360;
-    scene.ball.body.setVelocity(vx, vy);
-    runStartMs = performance.now();
+    // パドル
+    roundRect(ctx, paddle.x, paddle.y, paddle.w, paddle.h, 6);
+    ctx.fillStyle = "#27d3a2"; ctx.fill();
+
+    // ボール
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2); ctx.closePath();
+    ctx.fillStyle = "#3f82ff"; ctx.fill();
+
+    // ほんのりグロー
+    ctx.globalAlpha = 0.08; ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r*5, 0, Math.PI*2);
+    ctx.fillStyle = "#3f82ff"; ctx.fill(); ctx.globalAlpha = 1;
   }
 
-  function pauseToggle(scene) {
-    if (state === GameState.PLAY) {
-      state = GameState.PAUSE;
-      scene.physics.world.pause();
-      scene.message.setText("一時停止中");
-      scene.message.setVisible(true);
-    } else if (state === GameState.PAUSE) {
-      state = GameState.PLAY;
-      scene.physics.world.resume();
-      scene.message.setVisible(false);
-    }
+  // -------- ユーティリティ --------
+  function rectCircleCollide(rect, c){
+    const cx = clamp(c.x, rect.x, rect.x + rect.w);
+    const cy = clamp(c.y, rect.y, rect.y + rect.h);
+    const dx = c.x - cx, dy = c.y - cy;
+    return dx*dx + dy*dy <= c.r*c.r;
+  }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+  function roundRect(ctx,x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w,y, x+w,y+h, r);
+    ctx.arcTo(x+w,y+h, x,y+h, r);
+    ctx.arcTo(x,y+h, x,y, r);
+    ctx.arcTo(x,y, x+w,y, r);
+    ctx.closePath();
   }
 
-  function nextStage(scene) {
-    stage += 1;
-    hud.stage.textContent = stage;
-
-    // パドル・ボールリセット＆ブロック再生成（難易度は後で調整）
-    setupBricks(scene);
-    scene.paddle.setPosition(VIEW_W / 2, VIEW_H - 140);
-    scene.paddle.body.updateFromGameObject();
-
-    scene.ball.setPosition(scene.paddle.x, scene.paddle.y - (scene.ball.radius + 2));
-    scene.ball.body.setVelocity(0, 0);
-    state = GameState.READY;
-    scene.ballStuck = true;
-    scene.message.setText("▶︎で次ステージ開始");
-    scene.message.setVisible(true);
+  function gameOver(cleared){
+    running = false; paused = false;
+    btnStart.hidden = false; btnPause.hidden = true; btnResume.hidden = true; btnReset.hidden = false;
+    showOverlay(true, cleared ? "クリア！" : "ゲームオーバー", `スコア: ${score} / レベル: ${level}`);
   }
 
-  function bindTouchZone() {
-    // iPhoneのスワイプゾーン。左右移動にのみ使う（ページスクロール抑制）
-    const onDown = (e) => {
-      e.preventDefault();
-      const x = pageToLocalX(e);
-      if (x != null) targetX = x;
-    };
-    const onMove = (e) => {
-      e.preventDefault();
-      const x = pageToLocalX(e);
-      if (x != null) targetX = x;
-    };
-    const onUp = (e) => {
-      e.preventDefault();
-    };
-
-    ["pointerdown", "pointermove", "pointerup", "pointercancel", "pointerleave"].forEach(type => {
-      touchZone.addEventListener(type, (e) => {
-        if (type === "pointerdown") onDown(e);
-        else if (type === "pointermove") onMove(e);
-        else onUp(e);
-      }, { passive: false });
-    });
-  }
-
-  function pageToLocalX(e) {
-    // gameParentの見た目幅→ゲーム座標（VIEW_W）へ変換
-    const parent = document.getElementById("gameParent");
-    const rect = parent.getBoundingClientRect();
-    const px = (e.clientX ?? (e.touches && e.touches[0]?.clientX));
-    if (px == null) return null;
-    const ratio = VIEW_W / rect.width;
-    return Phaser.Math.Clamp((px - rect.left) * ratio, 0, VIEW_W);
-  }
-
-  function updateHUDElapsed() {
-    if (state === GameState.PLAY || state === GameState.READY) {
-      const sec = Math.max(0, Math.floor((performance.now() - runStartMs) / 1000));
-      hud.elapsed.textContent = formatTime(sec);
-    }
-  }
-
-  function formatTime(sec) {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  }
+  // 初期表示
+  resizeCanvas();
+  showOverlay(true, "ブロック崩し", "左右キー / マウス / タッチ で操作");
+  draw();
 })();
