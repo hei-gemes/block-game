@@ -15,7 +15,7 @@
         <div><span id="level">LV 1</span>　<span id="wave">WAVE 1</span></div>
         <div><span id="score">SCORE 0</span>　<span id="time">00:00</span></div>
       </div>
-      <button id="mobilePause" aria-label="一時停止" style="position:absolute;right:10px;bottom:34px;z-index:4;width:44px;height:44px;padding:0;border-radius:50%;opacity:.78;display:none">Ⅱ</button>
+      <button id="mobilePause" aria-label="一時停止">Ⅱ</button>
       <div id="xpbar"><div id="xpfill"></div></div>
 
       <div id="start" class="overlay">
@@ -23,7 +23,7 @@
           <h2>ROGUE BREAKER</h2>
           <p>ブロック崩し × ヴァンサバ風ローグライト。<br>
           ブロックを壊してXPを拾い、レベルアップごとに<strong>3択強化</strong>。毎回違うビルドで、できるだけ長く生き残ろう。</p>
-          <p><b>操作：</b> PC：マウス / ← → / A D　　スマホ：画面を指でなぞる<br><b>SPACE：</b>開始・一時停止</p>
+          <p><b>操作：</b> PC：マウス / ← → / A D<br>スマホ：画面下の操作エリアを左右にスライド（パドルは指より上に表示）<br><b>SPACE：</b>開始・一時停止</p>
           <button id="startBtn">ゲーム開始</button>
         </div>
       </div>
@@ -59,9 +59,10 @@
       <div class="help">
         ・XPオーブはパドルで回収<br>
         ・赤い敵ブロックは弾を撃つ<br>
+        ・ボールは敵弾を消せる<br>
+        ・返球直後は短時間ガード<br>
         ・敵弾 or ボールロストでHP減少<br>
-        ・全ブロック破壊で次WAVE<br>
-        ・WAVEごとに敵が強化
+        ・全ブロック破壊で次WAVE
       </div>
     </aside>
   </div>
