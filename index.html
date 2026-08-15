@@ -15,6 +15,10 @@
         <div><span id="level">LV 1</span>　<span id="wave">WAVE 1</span></div>
         <div><span id="score">SCORE 0</span>　<span id="time">00:00</span></div>
       </div>
+      <div id="statusHud">
+        <span id="hpHud">♥ 5 / 5</span>
+        <span id="shieldHud">🛡 なし</span>
+      </div>
       <button id="mobilePause" aria-label="一時停止">Ⅱ</button>
       <div id="xpbar"><div id="xpfill"></div></div>
 
@@ -23,7 +27,7 @@
           <h2>ROGUE BREAKER</h2>
           <p>ブロック崩し × ヴァンサバ風ローグライト。<br>
           ブロックを壊してXPを拾い、レベルアップごとに<strong>3択強化</strong>。毎回違うビルドで、できるだけ長く生き残ろう。</p>
-          <p><b>操作：</b> PC：マウス / ← → / A D<br>スマホ：画面下の操作エリアを左右にスライド（パドルは指より上に表示）<br><b>SPACE：</b>開始・一時停止</p>
+          <p><b>操作：</b> PC：マウス / ← → / A D<br>スマホ：画面下部を左右にスライド<br><b>新要素：</b> 回復アイテム・再生バリア・5WAVEごとのボス</p>
           <button id="startBtn">ゲーム開始</button>
         </div>
       </div>
@@ -49,6 +53,7 @@
       <h1>ROGUE BREAKER</h1>
       <div class="tag">prototype build</div>
       <div class="stat"><span>HP</span><b id="hp">5 / 5</b></div>
+      <div class="stat"><span>バリア</span><b id="barrierSide">なし</b></div>
       <div class="stat"><span>ボール</span><b id="ballCount">1</b></div>
       <div class="stat"><span>ダメージ</span><b id="damage">1</b></div>
       <div class="stat"><span>貫通</span><b id="pierce">0</b></div>
@@ -58,16 +63,15 @@
       <div class="section">RULES</div>
       <div class="help">
         ・XPオーブはパドルで回収<br>
-        ・赤い敵ブロックは弾を撃つ<br>
+        ・緑のハートでHP +1<br>
         ・ボールは敵弾を消せる<br>
-        ・返球直後は短時間ガード<br>
-        ・敵弾 or ボールロストでHP減少<br>
-        ・全ブロック破壊で次WAVE
+        ・返球後は約0.65秒ガード<br>
+        ・バリアは時間で自動復活<br>
+        ・5WAVEごとにBOSS
       </div>
     </aside>
   </div>
 </div>
-
 <script src="script.js"></script>
 </body>
 </html>
