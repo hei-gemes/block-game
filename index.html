@@ -1,43 +1,72 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ブロック崩し</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<title>ROGUE BREAKER</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="hud">
-    <div>🎯 スコア: <span id="score">0</span></div>
-    <div>❤️ ライフ: <span id="lives">3</span></div>
-    <div>🧱 レベル: <span id="level">1</span></div>
-  </header>
+<div id="wrap">
+  <div id="shell">
+    <div id="gamePanel">
+      <canvas id="game" width="820" height="720"></canvas>
+      <div id="hudTop">
+        <div><span id="level">LV 1</span>　<span id="wave">WAVE 1</span></div>
+        <div><span id="score">SCORE 0</span>　<span id="time">00:00</span></div>
+      </div>
+      <button id="mobilePause" aria-label="一時停止" style="position:absolute;right:10px;bottom:34px;z-index:4;width:44px;height:44px;padding:0;border-radius:50%;opacity:.78;display:none">Ⅱ</button>
+      <div id="xpbar"><div id="xpfill"></div></div>
 
-  <main class="stage">
-    <div class="canvas-wrap">
-      <canvas id="game" width="480" height="640"></canvas>
+      <div id="start" class="overlay">
+        <div class="card">
+          <h2>ROGUE BREAKER</h2>
+          <p>ブロック崩し × ヴァンサバ風ローグライト。<br>
+          ブロックを壊してXPを拾い、レベルアップごとに<strong>3択強化</strong>。毎回違うビルドで、できるだけ長く生き残ろう。</p>
+          <p><b>操作：</b> PC：マウス / ← → / A D　　スマホ：画面を指でなぞる<br><b>SPACE：</b>開始・一時停止</p>
+          <button id="startBtn">ゲーム開始</button>
+        </div>
+      </div>
 
-      <!-- キャンバス上に中央固定されるオーバーレイ -->
-      <div id="overlay" class="overlay">
-        <div class="panel">
-          <h1 id="titleText">ブロック崩し</h1>
-          <p class="msg" id="descText">左右キー / マウス / タッチ で操作</p>
-          <div class="row">
-            <button id="btnStart" class="btn">ゲーム開始</button>
-            <button id="btnPause" class="btn" hidden>一時停止 ⏸</button>
-            <button id="btnResume" class="btn" hidden>再開 ▶︎</button>
-            <button id="btnReset" class="btn btn-outline" hidden>リセット ↺</button>
-          </div>
-          <small>ヒント: 「P」キーで一時停止/再開</small>
+      <div id="levelup" class="overlay hidden">
+        <div class="card">
+          <h2>LEVEL UP</h2>
+          <p>強化を1つ選んでください。</p>
+          <div id="choices"></div>
+        </div>
+      </div>
+
+      <div id="gameover" class="overlay hidden">
+        <div class="card">
+          <h2>RUN OVER</h2>
+          <p id="result"></p>
+          <button id="retryBtn">もう一度</button>
         </div>
       </div>
     </div>
-  </main>
 
-  <footer class="tips">
-    <span>操作: ← → キー / マウス移動 / スワイプ</span>
-  </footer>
+    <aside id="side">
+      <h1>ROGUE BREAKER</h1>
+      <div class="tag">prototype build</div>
+      <div class="stat"><span>HP</span><b id="hp">5 / 5</b></div>
+      <div class="stat"><span>ボール</span><b id="ballCount">1</b></div>
+      <div class="stat"><span>ダメージ</span><b id="damage">1</b></div>
+      <div class="stat"><span>貫通</span><b id="pierce">0</b></div>
+      <div class="stat"><span>XP倍率</span><b id="xpmul">1.00x</b></div>
+      <div class="section">BUILD</div>
+      <div id="build"></div>
+      <div class="section">RULES</div>
+      <div class="help">
+        ・XPオーブはパドルで回収<br>
+        ・赤い敵ブロックは弾を撃つ<br>
+        ・敵弾 or ボールロストでHP減少<br>
+        ・全ブロック破壊で次WAVE<br>
+        ・WAVEごとに敵が強化
+      </div>
+    </aside>
+  </div>
+</div>
 
-  <script src="script.js"></script>
+<script src="script.js"></script>
 </body>
 </html>
