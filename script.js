@@ -198,12 +198,12 @@ function presentChoices(choices,title,text){
   return true;
 }
 function chooseFromPool(pool,count=3){
-  const choices=[];
-  while(choices.length<count&&pool.length){
-    const u=pick(pool);
-    if(!choices.includes(u))choices.push(u);
+  const shuffled=[...pool];
+  for(let i=shuffled.length-1;i>0;i--){
+    const j=(Math.random()*(i+1))|0;
+    [shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]];
   }
-  return choices;
+  return shuffled.slice(0,Math.min(count,shuffled.length));
 }
 function levelUp(){
   const pool=upgrades.filter(u=>u.rarity!=="LEGEND"&&(state.owned[u.id]||0)<u.max);
@@ -213,8 +213,12 @@ function levelUp(){
 function legendReward(){
   const pool=upgrades.filter(u=>u.rarity==="LEGEND"&&(state.owned[u.id]||0)<u.max);
   const choices=chooseFromPool(pool,3);
-  if(!presentChoices(choices,"BOSS REWARD","金のハート獲得！ LEGENDを1つ選んでください。")){
-    flash("LEGEND COMPLETE!");
+  if(presentChoices(choices,"BOSS REWARD","金のハート獲得！ LEGENDを1つ選んでください。"))return;
+
+  const normalPool=upgrades.filter(u=>u.rarity!=="LEGEND"&&(state.owned[u.id]||0)<u.max);
+  const normalChoices=chooseFromPool(normalPool,3);
+  if(!presentChoices(normalChoices,"BOSS REWARD","LEGENDを全て取得済み！ 通常強化を1つ選んでください。")){
+    flash("UPGRADES COMPLETE!");
     state.running=true;
   }
 }
