@@ -5,6 +5,8 @@ const W=canvas.width,H=canvas.height,isTouch=("ontouchstart" in window)||navigat
 const TOP_SAFE=isTouch?145:52;
 const BRICK_TOP=isTouch?175:82;
 const PADDLE_Y=isTouch?H-122:H-54;
+const MAX_HP=20;
+const AUTO_COLLECT_SECONDS=6;
 const $=id=>document.getElementById(id);
 const ui={
   level:$("level"),wave:$("wave"),score:$("score"),time:$("time"),
@@ -21,16 +23,14 @@ let keys={},mouseX=W/2,state,last=performance.now(),flashText="",flashLife=0;
 
 function barrierRechargeTime(level){return Math.max(4,12-(level-1)*2)}
 const upgrades=[
-  {id:"multi",name:"分裂弾",rarity:"RARE",desc:"ボールを1個追加する。",max:5,apply:s=>extraBall(s)},
+  {id:"split",name:"分裂弾",rarity:"RARE",desc:"壁に当たると敵へ5発の分裂弾。Lvで1発あたりのヒット回数 +1。",max:5,apply:s=>s.splitLevel++},
   {id:"pierce",name:"貫通",rarity:"RARE",desc:"ブロックを貫通できる回数 +1。",max:5,apply:s=>s.pierce++},
-  {id:"wide",name:"巨大パドル",rarity:"COMMON",desc:"パドル幅 +18%。",max:6,apply:s=>s.paddle.w=Math.min(260,s.paddle.w*1.18)},
   {id:"damage",name:"ヘビーボール",rarity:"COMMON",desc:"ブロックへのダメージ +1。",max:8,apply:s=>s.ballDamage++},
-  {id:"speed",name:"加速",rarity:"COMMON",desc:"ボール速度 +8%。",max:8,apply:s=>s.ballSpeedMul*=1.08},
   {id:"xp",name:"学習効率",rarity:"COMMON",desc:"獲得XP +20%。",max:8,apply:s=>s.xpMul*=1.2},
   {id:"magnet",name:"磁力",rarity:"COMMON",desc:"XP吸引距離 +45。",max:6,apply:s=>s.magnet+=45},
-  {id:"heal",name:"修復",rarity:"UNCOMMON",desc:"最大HP +1、HPを2回復。",max:5,apply:s=>{s.maxHp++;s.hp=Math.min(s.maxHp,s.hp+2)}},
+  {id:"heal",name:"修復",rarity:"UNCOMMON",desc:"最大HP +1（上限20）、HPを2回復。",max:5,apply:s=>{if(s.maxHp<MAX_HP)s.maxHp++;s.hp=Math.min(s.maxHp,s.hp+2)}},
   {id:"shield",name:"再生バリア",rarity:"UNCOMMON",desc:"1回防御するバリア。破壊後は自動復活。レベルで復活が早くなる。",max:5,apply:s=>{s.barrierLevel++;s.barrierActive=true;s.barrierCooldown=0}},
-  {id:"collector",name:"オートコレクト",rarity:"LEGEND",desc:"XPが自動追尾する。",max:1,apply:s=>s.autoCollect=true},
+  {id:"poison",name:"毒球",rarity:"LEGEND",desc:"命中した敵を3秒間毒状態にする。Lvで毎秒の毒ダメージ +1。",max:5,apply:s=>s.poisonLevel++},
   {id:"fury",name:"瀕死の猛攻",rarity:"LEGEND",desc:"HP半分以下で速度と威力上昇。",max:1,apply:s=>s.fury=true},
   {id:"echo",name:"エコーショット",rarity:"LEGEND",desc:"8秒ごとに追加ボール。",max:1,apply:s=>s.echo=true}
 ];
@@ -40,11 +40,11 @@ function newState(){
     running:false,paused:false,dead:false,elapsed:0,score:0,wave:1,
     level:1,xp:0,nextXp:30,hp:5,maxHp:5,
     barrierLevel:0,barrierActive:false,barrierCooldown:0,
-    pierce:0,ballDamage:1,ballSpeedMul:1,xpMul:1,magnet:75,
-    autoCollect:false,fury:false,echo:false,echoTimer:0,
-    waveClearTimer:0,guardTimer:0,
+    pierce:0,ballDamage:1,xpMul:1,magnet:75,splitLevel:0,poisonLevel:0,
+    autoCollectTimer:0,fury:false,echo:false,echoTimer:0,
+    waveClearTimer:0,guardTimer:0,bossRewardPending:false,
     paddle:{x:W/2-70,y:PADDLE_Y,w:140,h:16,speed:620},
-    balls:[],bricks:[],orbs:[],items:[],bullets:[],particles:[],owned:{}
+    balls:[],splitShots:[],bricks:[],orbs:[],items:[],bullets:[],particles:[],owned:{}
   };
   spawnBall(s,W/2,PADDLE_Y-28,rand(-.65,.65),-1);
   makeWave(s);
@@ -52,7 +52,7 @@ function newState(){
 }
 function spawnBall(s,x,y,dx,dy){
   const len=Math.hypot(dx,dy)||1;
-  s.balls.push({x,y,r:7,vx:dx/len*330,vy:dy/len*330,pierceLeft:s.pierce,trail:[]});
+  s.balls.push({x,y,r:7,vx:dx/len*330,vy:dy/len*330,pierceLeft:s.pierce,trail:[],lastBrick:null});
 }
 function extraBall(s){
   const b=s.balls[0];
@@ -60,6 +60,7 @@ function extraBall(s){
 }
 function makeWave(s){
   s.bricks=[];
+  s.splitShots=[];
   if(s.wave%5===0){makeBossWave(s);return}
   const rows=Math.min(7,4+Math.floor(s.wave/2)),cols=9,gap=7,margin=40;
   const bw=(W-margin*2-gap*(cols-1))/cols,bh=28;
@@ -71,17 +72,18 @@ function makeWave(s){
     else if(roll<Math.min(.27+s.wave*.018,.55))type="tank";
     const base=1+Math.floor((s.wave-1)/3);
     const hp=type==="tank"?base+2:type==="enemy"?base+1:base;
-    s.bricks.push({x,y,w:bw,h:bh,hp,maxHp:hp,type,shot:rand(1.5,3.4)});
+    s.bricks.push({x,y,w:bw,h:bh,hp,maxHp:hp,type,shot:rand(1.5,3.4),poisonTimer:0,poisonTick:1});
   }
 }
 function makeBossWave(s){
   const w=460,h=62,x=(W-w)/2,y=BRICK_TOP+34;
-  const hp=18+s.wave*2;
-  s.bricks.push({x,y,w,h,hp,maxHp:hp,type:"boss",shot:1.8});
+  const hp=35+s.wave*5;
+  s.bricks.push({x,y,w,h,hp,maxHp:hp,type:"boss",shot:1.8,poisonTimer:0,poisonTick:1});
   flash("BOSS WAVE!");
 }
 function dropOrb(s,x,y,value){s.orbs.push({x,y,r:6,vy:85,value})}
 function dropHeal(s,x,y){s.items.push({type:"heal",x,y,r:10,vy:72,spin:0})}
+function dropAutoCollect(s,x,y){s.items.push({type:"collect",x,y,r:11,vy:72,spin:0})}
 function particles(x,y,n=5){
   for(let i=0;i<n;i++)state.particles.push({x,y,vx:rand(-90,90),vy:rand(-100,50),life:rand(.25,.6),max:.6});
 }
@@ -166,14 +168,16 @@ function endGame(){
   ui.result.innerHTML=`到達 <b>WAVE ${state.wave}</b> ／ LV ${state.level}<br>スコア <b>${state.score.toLocaleString()}</b><br>生存時間 ${fmt(state.elapsed)}`;
   ui.gameover.classList.remove("hidden");
 }
-function levelUp(){
+function setChoiceHeader(title,text){
+  const card=ui.levelup.querySelector(".card");
+  const h=card?.querySelector("h2"),p=card?.querySelector("p");
+  if(h)h.textContent=title;
+  if(p)p.textContent=text;
+}
+function presentChoices(choices,title,text){
+  if(!choices.length)return false;
   state.running=false;
-  const pool=upgrades.filter(u=>(state.owned[u.id]||0)<u.max),choices=[];
-  while(choices.length<3&&pool.length){
-    const u=pick(pool);
-    if(!choices.includes(u))choices.push(u);
-  }
-  if(!choices.length){state.running=true;return}
+  setChoiceHeader(title,text);
   ui.choices.innerHTML="";
   choices.forEach(u=>{
     const d=document.createElement("div");
@@ -184,12 +188,35 @@ function levelUp(){
       u.apply(state);
       state.balls.forEach(b=>b.pierceLeft=state.pierce);
       ui.levelup.classList.add("hidden");
+      setChoiceHeader("LEVEL UP","強化を1つ選んでください。");
       state.running=true;
       updateUI();
     });
     ui.choices.appendChild(d);
   });
   ui.levelup.classList.remove("hidden");
+  return true;
+}
+function chooseFromPool(pool,count=3){
+  const choices=[];
+  while(choices.length<count&&pool.length){
+    const u=pick(pool);
+    if(!choices.includes(u))choices.push(u);
+  }
+  return choices;
+}
+function levelUp(){
+  const pool=upgrades.filter(u=>u.rarity!=="LEGEND"&&(state.owned[u.id]||0)<u.max);
+  const choices=chooseFromPool(pool,3);
+  if(!presentChoices(choices,"LEVEL UP","強化を1つ選んでください。"))state.running=true;
+}
+function legendReward(){
+  const pool=upgrades.filter(u=>u.rarity==="LEGEND"&&(state.owned[u.id]||0)<u.max);
+  const choices=chooseFromPool(pool,3);
+  if(!presentChoices(choices,"BOSS REWARD","金のハート獲得！ LEGENDを1つ選んでください。")){
+    flash("LEGEND COMPLETE!");
+    state.running=true;
+  }
 }
 function gainXp(v){
   state.xp+=v*state.xpMul;
@@ -204,30 +231,94 @@ function circleRect(c,r){
   const x=clamp(c.x,r.x,r.x+r.w),y=clamp(c.y,r.y,r.y+r.h);
   return(c.x-x)**2+(c.y-y)**2<c.r**2;
 }
+function applyPoison(br){
+  if(state.poisonLevel<=0)return;
+  if(br.poisonTimer<=0)br.poisonTick=1;
+  br.poisonTimer=3;
+}
+function damageBrick(br,amount,x,y,withPoison=true){
+  const idx=state.bricks.indexOf(br);
+  if(idx<0)return false;
+  br.hp-=amount;
+  if(withPoison)applyPoison(br);
+  particles(x??br.x+br.w/2,y??br.y+br.h/2,4);
+  if(br.hp<=0){
+    onBrickDestroyed(br);
+    state.bricks.splice(idx,1);
+    return true;
+  }
+  return false;
+}
+function bounceOffBrick(b,br){
+  const left=(b.x+b.r)-br.x;
+  const right=(br.x+br.w)-(b.x-b.r);
+  const top=(b.y+b.r)-br.y;
+  const bottom=(br.y+br.h)-(b.y-b.r);
+  const m=Math.min(left,right,top,bottom);
+  if(m===left){b.x=br.x-b.r-1;b.vx=-Math.abs(b.vx)}
+  else if(m===right){b.x=br.x+br.w+b.r+1;b.vx=Math.abs(b.vx)}
+  else if(m===top){b.y=br.y-b.r-1;b.vy=-Math.abs(b.vy)}
+  else{b.y=br.y+br.h+b.r+1;b.vy=Math.abs(b.vy)}
+}
+function spawnSplitBurst(s,b){
+  if(s.splitLevel<=0||!s.bricks.length)return;
+  for(let i=0;i<5;i++){
+    const target=s.bricks[(Math.random()*s.bricks.length)|0];
+    const tx=target.x+target.w/2,ty=target.y+target.h/2;
+    const angle=Math.atan2(ty-b.y,tx-b.x)+rand(-.10,.10),speed=470;
+    s.splitShots.push({x:b.x,y:b.y,r:4,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,hitsLeft:s.splitLevel,lastBrick:null,life:2.4});
+  }
+  if(s.splitShots.length>80)s.splitShots.splice(0,s.splitShots.length-80);
+}
 function onBrickDestroyed(br){
   if(br.type==="boss"){
     state.score+=2000;
     dropOrb(state,br.x+br.w/2,br.y+br.h/2,28);
-    dropHeal(state,br.x+br.w*.42,br.y+br.h/2);
-    dropHeal(state,br.x+br.w*.58,br.y+br.h/2);
-    flash("BOSS DOWN!");
+    if(state.maxHp<MAX_HP){
+      state.maxHp++;
+      state.hp=Math.min(state.maxHp,state.hp+1);
+      flash("BOSS DOWN! GOLD HEART +1");
+    }else{
+      state.hp=Math.min(state.maxHp,state.hp+2);
+      flash("BOSS DOWN! HP MAX");
+    }
+    state.bossRewardPending=true;
     return;
   }
   state.score+=br.type==="enemy"?180:br.type==="tank"?120:75;
   dropOrb(state,br.x+br.w/2,br.y+br.h/2,br.type==="enemy"?8:br.type==="tank"?6:4);
   if(Math.random()<.055)dropHeal(state,br.x+br.w/2,br.y+br.h/2);
+  if(Math.random()<.035)dropAutoCollect(state,br.x+br.w/2,br.y+br.h/2);
 }
 
 function update(dt){
   if(!state.running||state.paused||state.dead)return;
   state.elapsed+=dt;
   state.guardTimer=Math.max(0,state.guardTimer-dt);
+  state.autoCollectTimer=Math.max(0,state.autoCollectTimer-dt);
 
   if(state.barrierLevel>0&&!state.barrierActive){
     state.barrierCooldown=Math.max(0,state.barrierCooldown-dt);
     if(state.barrierCooldown<=0){
       state.barrierActive=true;
       flash("BARRIER READY");
+    }
+  }
+
+  for(let i=state.bricks.length-1;i>=0;i--){
+    const br=state.bricks[i];
+    if(br.poisonTimer>0&&state.poisonLevel>0){
+      br.poisonTimer=Math.max(0,br.poisonTimer-dt);
+      br.poisonTick-=dt;
+      if(br.poisonTick<=0){
+        br.poisonTick+=1;
+        br.hp-=state.poisonLevel;
+        particles(br.x+br.w/2,br.y+br.h/2,3);
+        if(br.hp<=0){
+          onBrickDestroyed(br);
+          state.bricks.splice(i,1);
+        }
+      }
     }
   }
 
@@ -285,7 +376,7 @@ function update(dt){
   }
 
   const fury=state.fury&&state.hp<=state.maxHp/2;
-  const targetBase=330*state.ballSpeedMul*(fury?1.18:1);
+  const targetBase=330*(fury?1.18:1);
   const dmg=state.ballDamage+(fury?1:0);
 
   for(let i=state.balls.length-1;i>=0;i--){
@@ -296,9 +387,12 @@ function update(dt){
     b.vx=b.vx/cur*targetBase;b.vy=b.vy/cur*targetBase;
     b.x+=b.vx*dt;b.y+=b.vy*dt;
 
-    if(b.x-b.r<0){b.x=b.r;b.vx=Math.abs(b.vx)}
-    if(b.x+b.r>W){b.x=W-b.r;b.vx=-Math.abs(b.vx)}
-    if(b.y-b.r<TOP_SAFE){b.y=TOP_SAFE+b.r;b.vy=Math.abs(b.vy)}
+    if(b.lastBrick&&!circleRect(b,b.lastBrick))b.lastBrick=null;
+    let wallHit=false;
+    if(b.x-b.r<0){b.x=b.r;b.vx=Math.abs(b.vx);wallHit=true}
+    if(b.x+b.r>W){b.x=W-b.r;b.vx=-Math.abs(b.vx);wallHit=true}
+    if(b.y-b.r<TOP_SAFE){b.y=TOP_SAFE+b.r;b.vy=Math.abs(b.vy);wallHit=true}
+    if(wallHit)spawnSplitBurst(state,b);
 
     if(b.vy>0&&circleRect(b,state.paddle)){
       b.y=state.paddle.y-b.r-1;
@@ -310,18 +404,15 @@ function update(dt){
 
     let hit=-1;
     for(let j=0;j<state.bricks.length;j++){
-      if(circleRect(b,state.bricks[j])){hit=j;break}
+      const br=state.bricks[j];
+      if(br!==b.lastBrick&&circleRect(b,br)){hit=j;break}
     }
     if(hit>=0){
       const br=state.bricks[hit];
-      br.hp-=dmg;
-      particles(b.x,b.y,4);
-      if(br.hp<=0){
-        onBrickDestroyed(br);
-        state.bricks.splice(hit,1);
-      }
+      b.lastBrick=br;
+      damageBrick(br,dmg,b.x,b.y,true);
       if(b.pierceLeft>0)b.pierceLeft--;
-      else b.vy*=-1;
+      else bounceOffBrick(b,br);
     }
 
     if(b.y-b.r>H){
@@ -333,12 +424,32 @@ function update(dt){
     }
   }
 
+  for(let i=state.splitShots.length-1;i>=0;i--){
+    const q=state.splitShots[i];
+    q.life-=dt;q.x+=q.vx*dt;q.y+=q.vy*dt;
+    if(q.lastBrick&&!circleRect(q,q.lastBrick))q.lastBrick=null;
+    let hit=-1;
+    for(let j=0;j<state.bricks.length;j++){
+      const br=state.bricks[j];
+      if(br!==q.lastBrick&&circleRect(q,br)){hit=j;break}
+    }
+    if(hit>=0){
+      const br=state.bricks[hit];
+      q.lastBrick=br;
+      damageBrick(br,dmg,q.x,q.y,true);
+      q.hitsLeft--;
+      if(q.hitsLeft<=0){state.splitShots.splice(i,1);continue}
+    }
+    if(q.life<=0||q.y<-30||q.y>H+30||q.x<-30||q.x>W+30)state.splitShots.splice(i,1);
+  }
+
   for(let i=state.orbs.length-1;i>=0;i--){
     const o=state.orbs[i],px=state.paddle.x+state.paddle.w/2,py=state.paddle.y,d=Math.hypot(px-o.x,py-o.y);
-    if(d<state.magnet||state.autoCollect){
-      const s=state.autoCollect?210:260;
-      o.x+=(px-o.x)/Math.max(d,1)*s*dt;
-      o.y+=(py-o.y)/Math.max(d,1)*s*dt;
+    const auto=state.autoCollectTimer>0;
+    if(d<state.magnet||auto){
+      const speed=auto?240:260;
+      o.x+=(px-o.x)/Math.max(d,1)*speed*dt;
+      o.y+=(py-o.y)/Math.max(d,1)*speed*dt;
     }else o.y+=o.vy*dt;
     if(circleRect(o,state.paddle)){
       gainXp(o.value);
@@ -360,6 +471,9 @@ function update(dt){
           state.score+=100;
           flash("FULL HP +100");
         }
+      }else if(it.type==="collect"){
+        state.autoCollectTimer=Math.max(state.autoCollectTimer,AUTO_COLLECT_SECONDS);
+        flash(`AUTO COLLECT ${AUTO_COLLECT_SECONDS}s`);
       }
       state.items.splice(i,1);
       continue;
@@ -371,6 +485,13 @@ function update(dt){
     const p=state.particles[i];
     p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=180*dt;
     if(p.life<=0)state.particles.splice(i,1);
+  }
+
+  if(state.bossRewardPending){
+    state.bossRewardPending=false;
+    legendReward();
+    updateUI();
+    return;
   }
 
   if(!state.bricks.length){
@@ -412,7 +533,7 @@ function updateUI(){
   ui.xpmul.textContent=state.xpMul.toFixed(2)+"x";
   ui.build.innerHTML=Object.entries(state.owned).map(([id,n])=>{
     const u=upgrades.find(x=>x.id===id);
-    return `<div class="chip"><b>${u.name} Lv.${n}</b>${u.desc}</div>`;
+    return u?`<div class="chip"><b>${u.name} Lv.${n}</b>${u.desc}</div>`:"";
   }).join("")||`<div class="chip">まだ強化なし</div>`;
 }
 function rr(x,y,w,h,r){
@@ -436,14 +557,17 @@ function draw(){
   const boss=state.bricks.find(b=>b.type==="boss");
   if(boss){
     ctx.fillStyle="rgba(255,255,255,.12)";ctx.fillRect(110,BRICK_TOP-18,W-220,7);
-    ctx.fillStyle="#c084fc";ctx.fillRect(110,BRICK_TOP-18,(W-220)*(boss.hp/boss.maxHp),7);
+    ctx.fillStyle="#c084fc";ctx.fillRect(110,BRICK_TOP-18,(W-220)*Math.max(0,boss.hp/boss.maxHp),7);
   }
 
   for(const b of state.bricks){
     ctx.fillStyle=b.type==="boss"?"#6b21a8":b.type==="enemy"?"#7f1d1d":b.type==="tank"?"#334155":"#1d4ed8";
     rr(b.x,b.y,b.w,b.h,b.type==="boss"?14:7);ctx.fill();
+    if(b.poisonTimer>0){
+      ctx.strokeStyle="#4ade80";ctx.lineWidth=2;rr(b.x+1,b.y+1,b.w-2,b.h-2,b.type==="boss"?13:6);ctx.stroke();ctx.lineWidth=1;
+    }
     ctx.fillStyle="rgba(255,255,255,.13)";
-    ctx.fillRect(b.x+5,b.y+5,(b.w-10)*(b.hp/b.maxHp),4);
+    ctx.fillRect(b.x+5,b.y+5,(b.w-10)*Math.max(0,b.hp/b.maxHp),4);
     if(b.type==="enemy"){
       ctx.fillStyle="#fecaca";ctx.beginPath();ctx.arc(b.x+b.w/2,b.y+b.h/2,5,0,Math.PI*2);ctx.fill();
     }else if(b.type==="boss"){
@@ -458,16 +582,24 @@ function draw(){
   }
 
   for(const it of state.items){
+    ctx.save();ctx.translate(it.x,it.y);ctx.rotate(Math.sin(it.spin)*.12);
     if(it.type==="heal"){
-      ctx.save();ctx.translate(it.x,it.y);ctx.rotate(Math.sin(it.spin)*.12);
       ctx.shadowBlur=18;ctx.shadowColor="#4ade80";ctx.fillStyle="#86efac";
       ctx.font="900 24px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("♥",0,1);
-      ctx.restore();ctx.shadowBlur=0;
+    }else if(it.type==="collect"){
+      ctx.shadowBlur=18;ctx.shadowColor="#38bdf8";ctx.fillStyle="#7dd3fc";
+      ctx.font="900 25px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("✦",0,1);
     }
+    ctx.restore();ctx.shadowBlur=0;
   }
 
   for(const q of state.bullets){
     ctx.shadowBlur=q.boss?18:12;ctx.shadowColor=q.boss?"#f0abfc":"#ef4444";ctx.fillStyle=q.boss?"#e879f9":"#fb7185";
+    ctx.beginPath();ctx.arc(q.x,q.y,q.r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+  }
+
+  for(const q of state.splitShots){
+    ctx.shadowBlur=14;ctx.shadowColor="#facc15";ctx.fillStyle="#fde047";
     ctx.beginPath();ctx.arc(q.x,q.y,q.r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
   }
 
@@ -496,6 +628,11 @@ function draw(){
     ctx.globalAlpha=Math.max(0,p.life/p.max);ctx.fillStyle="#fff";ctx.fillRect(p.x,p.y,3,3);
   }
   ctx.globalAlpha=1;
+
+  if(state.autoCollectTimer>0){
+    ctx.fillStyle="#7dd3fc";ctx.font="800 14px system-ui";ctx.textAlign="center";
+    ctx.fillText(`AUTO COLLECT ${state.autoCollectTimer.toFixed(1)}s`,W/2,TOP_SAFE+20);
+  }
 
   if(state.paused&&state.running){
     ctx.fillStyle="rgba(0,0,0,.45)";ctx.fillRect(0,0,W,H);
