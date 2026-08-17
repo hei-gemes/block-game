@@ -7,6 +7,12 @@ window.createRogueCombat=({W,H,TOP_SAFE,MAX_HP,AUTO_COLLECT_SECONDS,clamp,rand,f
     return(c.x-x)**2+(c.y-y)**2<c.r**2;
   }
 
+  function ballPaddleRect(state){
+    if(!state.ghost)return state.paddle;
+    const w=state.ghostBallWidth||210;
+    return{x:state.paddle.x+state.paddle.w/2-w/2,y:state.paddle.y,w,h:state.paddle.h};
+  }
+
   function spawnBall(state,x,y,dx,dy){
     const len=Math.hypot(dx,dy)||1;
     state.balls.push({x,y,r:7,vx:dx/len*330,vy:dy/len*330,pierceLeft:state.pierce,trail:[],lastBrick:null});
@@ -89,6 +95,51 @@ window.createRogueCombat=({W,H,TOP_SAFE,MAX_HP,AUTO_COLLECT_SECONDS,clamp,rand,f
     if(state.splitShots.length>80)state.splitShots.splice(0,state.splitShots.length-80);
   }
 
+  function fireShotgun(state){
+    if(state.shotgunLevel<=0)return;
+    const lvl=state.shotgunLevel;
+    const pellets=3+(lvl-1);
+    const spread=.72;
+    const range=120+(lvl-1)*18;
+    const speed=430;
+    const cx=state.paddle.x+state.paddle.w/2;
+    const cy=state.paddle.y-2;
+    for(let i=0;i<pellets;i++){
+      const t=pellets===1?.5:i/(pellets-1);
+      const angle=-Math.PI/2+(t-.5)*spread;
+      state.interceptors.push({x:cx,y:cy,r:4,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:range/speed});
+    }
+  }
+
+  function updateShotgun(state,dt){
+    if(state.shotgunLevel>0){
+      state.shotgunTimer-=dt;
+      if(state.shotgunTimer<=0){
+        fireShotgun(state);
+        state.shotgunTimer=Math.max(.85,2.25-(state.shotgunLevel-1)*.3);
+      }
+    }
+
+    for(let i=state.interceptors.length-1;i>=0;i--){
+      const s=state.interceptors[i];
+      s.life-=dt;s.x+=s.vx*dt;s.y+=s.vy*dt;
+      let spent=false;
+      for(let j=state.bullets.length-1;j>=0;j--){
+        const q=state.bullets[j],rr=s.r+q.r;
+        if((s.x-q.x)**2+(s.y-q.y)**2<rr*rr){
+          state.bullets.splice(j,1);
+          state.interceptors.splice(i,1);
+          particles(state,q.x,q.y,5);
+          state.score+=10;
+          spent=true;
+          break;
+        }
+      }
+      if(spent)continue;
+      if(s.life<=0||s.y<-30||s.x<-30||s.x>W+30)state.interceptors.splice(i,1);
+    }
+  }
+
   function updatePoison(state,dt){
     for(let i=state.bricks.length-1;i>=0;i--){
       const br=state.bricks[i];
@@ -153,9 +204,10 @@ window.createRogueCombat=({W,H,TOP_SAFE,MAX_HP,AUTO_COLLECT_SECONDS,clamp,rand,f
       if(b.y-b.r<TOP_SAFE){b.y=TOP_SAFE+b.r;b.vy=Math.abs(b.vy);wallHit=true}
       if(wallHit)spawnSplitBurst(state,b);
 
-      if(b.vy>0&&circleRect(b,state.paddle)){
-        b.y=state.paddle.y-b.r-1;
-        const hit=(b.x-(state.paddle.x+state.paddle.w/2))/(state.paddle.w/2),ang=hit*1.05;
+      const paddleRect=ballPaddleRect(state);
+      if(b.vy>0&&circleRect(b,paddleRect)){
+        b.y=paddleRect.y-b.r-1;
+        const hit=(b.x-(paddleRect.x+paddleRect.w/2))/(paddleRect.w/2),ang=hit*1.05;
         b.vx=Math.sin(ang)*targetBase;b.vy=-Math.cos(ang)*targetBase;
         b.pierceLeft=state.pierce;
         state.guardTimer=.65;
@@ -259,9 +311,9 @@ window.createRogueCombat=({W,H,TOP_SAFE,MAX_HP,AUTO_COLLECT_SECONDS,clamp,rand,f
   }
 
   return{
-    circleRect,spawnBall,extraBall,dropOrb,dropHeal,dropAutoCollect,particles,
-    applyPoison,onBrickDestroyed,damageBrick,bounceOffBrick,spawnSplitBurst,
-    updatePoison,updateBullets,updateBalls,updateSplitShots,updateOrbs,updateItems,updateParticles
+    circleRect,ballPaddleRect,spawnBall,extraBall,dropOrb,dropHeal,dropAutoCollect,particles,
+    applyPoison,onBrickDestroyed,damageBrick,bounceOffBrick,spawnSplitBurst,fireShotgun,
+    updatePoison,updateShotgun,updateBullets,updateBalls,updateSplitShots,updateOrbs,updateItems,updateParticles
   };
 };
 })();
