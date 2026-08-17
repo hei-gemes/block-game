@@ -29,7 +29,9 @@ window.createRogueUI=({canvas,ctx,W,H,TOP_SAFE,BRICK_TOP,isTouch,upgrades,getFla
     ui.xpmul.textContent=state.xpMul.toFixed(2)+"x";
     ui.build.innerHTML=Object.entries(state.owned).map(([id,n])=>{
       const u=upgrades.find(x=>x.id===id);
-      return u?`<div class="chip"><b>${u.name} Lv.${n}</b>${u.desc}</div>`:"";
+      if(!u)return"";
+      const level=u.max===1?"":` Lv.${n}`;
+      return`<div class="chip"><b>${u.name}${level}</b>${u.desc}</div>`;
     }).join("")||`<div class="chip">まだ強化なし</div>`;
   }
 
@@ -101,9 +103,26 @@ window.createRogueUI=({canvas,ctx,W,H,TOP_SAFE,BRICK_TOP,isTouch,upgrades,getFla
       ctx.beginPath();ctx.arc(q.x,q.y,q.r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
     }
 
+    for(const q of state.interceptors){
+      ctx.shadowBlur=12;ctx.shadowColor="#67e8f9";ctx.fillStyle="#cffafe";
+      ctx.beginPath();ctx.arc(q.x,q.y,q.r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    }
+
     const p=state.paddle;
-    const guard=state.guardTimer>0;
+    const guard=state.guardTimer>0||state.hitInvulnTimer>0;
     const barrier=state.barrierLevel>0&&state.barrierActive;
+
+    if(state.ghost){
+      const gw=state.ghostBallWidth||210,gx=p.x+p.w/2-gw/2;
+      ctx.save();
+      ctx.globalAlpha=.24;
+      ctx.shadowBlur=16;ctx.shadowColor="#67e8f9";ctx.fillStyle="#67e8f9";
+      rr(gx,p.y,gw,p.h,8);ctx.fill();
+      ctx.globalAlpha=.58;ctx.strokeStyle="#a5f3fc";ctx.lineWidth=1.5;
+      rr(gx,p.y,gw,p.h,8);ctx.stroke();
+      ctx.restore();ctx.lineWidth=1;ctx.shadowBlur=0;
+    }
+
     ctx.shadowBlur=guard?30:barrier?24:18;
     ctx.shadowColor=guard?"#67e8f9":barrier?"#60a5fa":"#a78bfa";
     ctx.fillStyle=guard?"#a5f3fc":barrier?"#bfdbfe":"#c4b5fd";
