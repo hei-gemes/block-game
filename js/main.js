@@ -7,6 +7,7 @@ const BRICK_TOP=isTouch?175:82;
 const PADDLE_Y=isTouch?H-122:H-54;
 const MAX_HP=20;
 const AUTO_COLLECT_SECONDS=6;
+const BASE_HIT_INVULN=.4;
 const $=id=>document.getElementById(id);
 const ui={
   level:$("level"),wave:$("wave"),score:$("score"),time:$("time"),
@@ -22,6 +23,7 @@ let keys={},mouseX=W/2,state,last=performance.now(),flashText="",flashLife=0;
 
 function flash(t){flashText=t;flashLife=.9}
 function barrierRechargeTime(level){return Math.max(4,12-(level-1)*2)}
+function hitInvulnTime(){return BASE_HIT_INVULN+state.adrenalineLevel*.25}
 
 const upgrades=window.createRogueUpgrades(MAX_HP);
 const enemies=window.createRogueEnemies({W,BRICK_TOP,rand,flash});
@@ -37,10 +39,12 @@ function newState(){
     level:1,xp:0,nextXp:30,hp:5,maxHp:5,
     barrierLevel:0,barrierActive:false,barrierCooldown:0,
     pierce:0,ballDamage:1,xpMul:1,magnet:75,splitLevel:0,poisonLevel:0,
+    shotgunLevel:0,shotgunTimer:0,adrenalineLevel:0,hitInvulnTimer:0,
+    ghost:false,ghostBallWidth:210,
     autoCollectTimer:0,fury:false,echo:false,echoTimer:0,
     waveClearTimer:0,guardTimer:0,bossRewardPending:false,
     paddle:{x:W/2-70,y:PADDLE_Y,w:140,h:16,speed:620},
-    balls:[],splitShots:[],bricks:[],orbs:[],items:[],bullets:[],particles:[],owned:{}
+    balls:[],splitShots:[],interceptors:[],bricks:[],orbs:[],items:[],bullets:[],particles:[],owned:{}
   };
   combat.spawnBall(s,W/2,PADDLE_Y-28,rand(-.65,.65),-1);
   enemies.makeWave(s);
@@ -116,7 +120,7 @@ canvas.addEventListener("contextmenu",e=>e.preventDefault());
 document.addEventListener("selectstart",e=>{if(isTouch)e.preventDefault()});
 
 function hurt(n=1){
-  if(state.guardTimer>0){flash("SAFE");return}
+  if(state.guardTimer>0||state.hitInvulnTimer>0){flash("SAFE");return}
   if(state.barrierLevel>0&&state.barrierActive){
     state.barrierActive=false;
     state.barrierCooldown=barrierRechargeTime(state.barrierLevel);
@@ -124,6 +128,7 @@ function hurt(n=1){
     return;
   }
   state.hp-=n;
+  state.hitInvulnTimer=hitInvulnTime();
   flash("-"+n+" HP");
   if(state.hp<=0)endGame();
 }
@@ -149,9 +154,11 @@ function presentChoices(choices,title,text){
   choices.forEach(u=>{
     const d=document.createElement("div");
     d.className="choice";
-    d.innerHTML=`<div class="rarity">${u.rarity}</div><h3>${u.name}</h3><p>${u.desc}</p><p>現在 Lv.${state.owned[u.id]||0}</p>`;
+    const current=state.owned[u.id]||0;
+    const levelText=u.max===1?"一度限り":`現在 Lv.${current}`;
+    d.innerHTML=`<div class="rarity">${u.rarity}</div><h3>${u.name}</h3><p>${u.desc}</p><p>${levelText}</p>`;
     bindTap(d,()=>{
-      state.owned[u.id]=(state.owned[u.id]||0)+1;
+      state.owned[u.id]=current+1;
       u.apply(state);
       state.balls.forEach(b=>b.pierceLeft=state.pierce);
       ui.levelup.classList.add("hidden");
@@ -207,6 +214,7 @@ function update(dt){
   if(!state.running||state.paused||state.dead)return;
   state.elapsed+=dt;
   state.guardTimer=Math.max(0,state.guardTimer-dt);
+  state.hitInvulnTimer=Math.max(0,state.hitInvulnTimer-dt);
   state.autoCollectTimer=Math.max(0,state.autoCollectTimer-dt);
 
   if(state.barrierLevel>0&&!state.barrierActive){
@@ -233,6 +241,7 @@ function update(dt){
   }
 
   enemies.updateFire(state,dt);
+  combat.updateShotgun(state,dt);
   combat.updateBullets(state,dt,()=>hurt());
   combat.updateBalls(state,dt,()=>hurt());
   combat.updateSplitShots(state,dt);
