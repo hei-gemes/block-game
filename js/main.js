@@ -40,9 +40,9 @@ function newState(){
     barrierLevel:0,barrierActive:false,barrierCooldown:0,
     pierce:0,ballDamage:1,xpMul:1,magnet:75,splitLevel:0,poisonLevel:0,
     shotgunLevel:0,shotgunTimer:0,adrenalineLevel:0,hitInvulnTimer:0,
-    ghost:false,ghostBallWidth:210,
+    ghost:false,ghostBallWidth:170,
     autoCollectTimer:0,fury:false,echo:false,echoTimer:0,
-    waveClearTimer:0,guardTimer:0,bossRewardPending:false,
+    waveClearTimer:0,bossRewardPending:false,
     paddle:{x:W/2-70,y:PADDLE_Y,w:140,h:16,speed:620},
     balls:[],splitShots:[],interceptors:[],bricks:[],orbs:[],items:[],bullets:[],particles:[],owned:{}
   };
@@ -120,7 +120,7 @@ canvas.addEventListener("contextmenu",e=>e.preventDefault());
 document.addEventListener("selectstart",e=>{if(isTouch)e.preventDefault()});
 
 function hurt(n=1){
-  if(state.guardTimer>0||state.hitInvulnTimer>0){flash("SAFE");return}
+  if(state.hitInvulnTimer>0){flash("SAFE");return}
   if(state.barrierLevel>0&&state.barrierActive){
     state.barrierActive=false;
     state.barrierCooldown=barrierRechargeTime(state.barrierLevel);
@@ -213,7 +213,6 @@ function gainXp(v){
 function update(dt){
   if(!state.running||state.paused||state.dead)return;
   state.elapsed+=dt;
-  state.guardTimer=Math.max(0,state.guardTimer-dt);
   state.hitInvulnTimer=Math.max(0,state.hitInvulnTimer-dt);
   state.autoCollectTimer=Math.max(0,state.autoCollectTimer-dt);
 
