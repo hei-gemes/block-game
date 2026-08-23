@@ -68,7 +68,7 @@ window.createRogueEnemies=({W,BRICK_TOP,rand,flash})=>{
     const shooters=state.bricks.filter(b=>b.type==="gunner"||b.type==="burst").length;
     let need=Math.max(0,minCount-shooters);
     if(!need)return;
-    const candidates=state.bricks.filter(b=>b.type==="normal");
+    const candidates=state.bricks.filter(b=>b.type!=="gunner"&&b.type!=="burst"&&b.type!=="boss");
     for(let i=candidates.length-1;i>0;i--){
       const j=(Math.random()*(i+1))|0;
       [candidates[i],candidates[j]]=[candidates[j],candidates[i]];
