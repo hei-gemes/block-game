@@ -96,6 +96,7 @@ window.createRogueUI=({canvas,ctx,W,H,TOP_SAFE,BRICK_TOP,isTouch,upgrades,getFla
       ctx.beginPath();ctx.moveTo(cx-18,cy);ctx.lineTo(cx-10,cy-6);ctx.lineTo(cx-10,cy+6);ctx.closePath();ctx.fill();
       ctx.beginPath();ctx.moveTo(cx+18,cy);ctx.lineTo(cx+10,cy-6);ctx.lineTo(cx+10,cy+6);ctx.closePath();ctx.fill();
       ctx.strokeStyle="#e0f2fe";ctx.beginPath();ctx.moveTo(cx-7,cy);ctx.lineTo(cx+7,cy);ctx.stroke();
+      ctx.fillStyle="#fecaca";ctx.beginPath();ctx.arc(cx,cy+6,3.4,0,Math.PI*2);ctx.fill();
     }else if(b.type==="splitling"){
       ctx.strokeStyle="#ede9fe";ctx.beginPath();ctx.moveTo(cx-5,cy-4);ctx.lineTo(cx+5,cy+4);ctx.moveTo(cx+5,cy-4);ctx.lineTo(cx-5,cy+4);ctx.stroke();
     }else if(b.type==="normal"){
@@ -154,8 +155,8 @@ window.createRogueUI=({canvas,ctx,W,H,TOP_SAFE,BRICK_TOP,isTouch,upgrades,getFla
     }
 
     for(const q of state.bullets){
-      const aura=q.aura==="boss"?"#c084fc":q.aura==="burst"?"#fb923c":q.aura==="buffed"?"#facc15":"#ef4444";
-      ctx.shadowBlur=q.boss?20:q.aura==="buffed"?18:13;
+      const aura=q.aura==="boss"?"#c084fc":q.aura==="burst"?"#fb923c":q.aura==="buffed"?"#facc15":q.aura==="mover"?"#38bdf8":"#ef4444";
+      ctx.shadowBlur=q.boss?20:q.aura==="buffed"?18:q.aura==="mover"?17:13;
       ctx.shadowColor=aura;
       ctx.fillStyle="#ff4d5e";
       ctx.beginPath();ctx.arc(q.x,q.y,q.r,0,Math.PI*2);ctx.fill();
