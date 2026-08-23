@@ -19,7 +19,7 @@ window.createRogueUpgrades=maxHp=>[
     s.ghost=true;
     s.paddle.w=84;
     s.paddle.x=cx-s.paddle.w/2;
-    s.ghostBallWidth=210;
+    s.ghostBallWidth=170;
   }}
 ];
 })();
