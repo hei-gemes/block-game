@@ -9,7 +9,7 @@ window.createRogueCombat=({W,H,TOP_SAFE,MAX_HP,AUTO_COLLECT_SECONDS,clamp,rand,f
 
   function ballPaddleRect(state){
     if(!state.ghost)return state.paddle;
-    const w=state.ghostBallWidth||210;
+    const w=state.ghostBallWidth||170;
     return{x:state.paddle.x+state.paddle.w/2-w/2,y:state.paddle.y,w,h:state.paddle.h};
   }
 
@@ -210,7 +210,6 @@ window.createRogueCombat=({W,H,TOP_SAFE,MAX_HP,AUTO_COLLECT_SECONDS,clamp,rand,f
         const hit=(b.x-(paddleRect.x+paddleRect.w/2))/(paddleRect.w/2),ang=hit*1.05;
         b.vx=Math.sin(ang)*targetBase;b.vy=-Math.cos(ang)*targetBase;
         b.pierceLeft=state.pierce;
-        state.guardTimer=.65;
       }
 
       let hit=-1;
