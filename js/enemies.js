@@ -43,7 +43,7 @@ window.createRogueEnemies=({W,BRICK_TOP,rand,flash})=>{
 
   function hpFor(type,base){
     if(type==="armor")return base+2;
-    if(["gunner","burst","support","splitter","bomber"].includes(type))return base+1;
+    if(["gunner","burst","support","splitter","bomber","mover"].includes(type))return base+1;
     return base;
   }
 
@@ -58,17 +58,22 @@ window.createRogueEnemies=({W,BRICK_TOP,rand,flash})=>{
     if(type==="mover"){
       brick.homeX=x;
       brick.movePhase=rand(0,Math.PI*2);
-      brick.moveSpeed=rand(.75,1.15);
-      brick.moveAmp=Math.min(26,w*.38);
+      brick.moveSpeed=rand(2.0,2.8);
+      brick.moveAmp=Math.min(38,w*.5);
+      brick.shot=rand(1.8,3.0);
     }
     return brick;
   }
 
+  function isShooter(br){
+    return br.type==="gunner"||br.type==="burst"||br.type==="mover";
+  }
+
   function ensureShooters(state,minCount){
-    const shooters=state.bricks.filter(b=>b.type==="gunner"||b.type==="burst").length;
+    const shooters=state.bricks.filter(isShooter).length;
     let need=Math.max(0,minCount-shooters);
     if(!need)return;
-    const candidates=state.bricks.filter(b=>b.type!=="gunner"&&b.type!=="burst"&&b.type!=="boss");
+    const candidates=state.bricks.filter(b=>!isShooter(b)&&b.type!=="boss");
     for(let i=candidates.length-1;i>0;i--){
       const j=(Math.random()*(i+1))|0;
       [candidates[i],candidates[j]]=[candidates[j],candidates[i]];
@@ -82,23 +87,44 @@ window.createRogueEnemies=({W,BRICK_TOP,rand,flash})=>{
     }
   }
 
+  function waveEnemyCap(wave){
+    if(wave===1)return 15;
+    if(wave===2)return 19;
+    if(wave===3)return 23;
+    if(wave===4)return 27;
+    return 32;
+  }
+
+  function trimToCap(bricks,cap){
+    if(bricks.length<=cap)return bricks;
+    const shuffled=[...bricks];
+    for(let i=shuffled.length-1;i>0;i--){
+      const j=(Math.random()*(i+1))|0;
+      [shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]];
+    }
+    return shuffled.slice(0,cap);
+  }
+
   function makeWave(state){
     state.bricks=[];
     state.splitShots=[];
     if(state.wave%5===0){makeBossWave(state);return}
 
-    const rows=state.wave<6?4:5,cols=9,gap=7,margin=40;
+    const rows=state.wave===1?3:state.wave<6?4:5,cols=9,gap=7,margin=40;
     const bw=(W-margin*2-gap*(cols-1))/cols,bh=28;
     const formation=FORMATIONS[(Math.random()*FORMATIONS.length)|0];
+    const generated=[];
 
     for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
       if(!formationAllows(formation,r,c,rows,cols))continue;
       if(Math.random()<(formation==="full"?.10:.05))continue;
       const x=margin+c*(bw+gap),y=BRICK_TOP+r*(bh+gap);
-      state.bricks.push(makeBrick(pickType(state.wave),x,y,bw,bh,state));
+      generated.push(makeBrick(pickType(state.wave),x,y,bw,bh,state));
     }
 
-    const minShooters=Math.max(3,Math.floor(state.bricks.length*.24));
+    state.bricks=trimToCap(generated,waveEnemyCap(state.wave));
+    const shooterRatio=state.wave===1?.20:.24;
+    const minShooters=Math.max(state.wave===1?2:3,Math.floor(state.bricks.length*shooterRatio));
     ensureShooters(state,minShooters);
   }
 
@@ -128,6 +154,14 @@ window.createRogueEnemies=({W,BRICK_TOP,rand,flash})=>{
     }));
   }
 
+  function fireMover(state,br,buffed){
+    const movement=Math.cos(br.movePhase);
+    state.bullets.push({
+      x:br.x+br.w/2,y:br.y+br.h,vx:movement*42,vy:132+state.wave*3,r:5,
+      kind:"mover",aura:buffed?"buffed":"mover"
+    });
+  }
+
   function updateMovers(state,dt){
     for(const br of state.bricks){
       if(br.type!=="mover")continue;
@@ -140,7 +174,7 @@ window.createRogueEnemies=({W,BRICK_TOP,rand,flash})=>{
   function updateFire(state,dt){
     updateMovers(state,dt);
     for(const br of state.bricks){
-      if(br.type==="gunner"||br.type==="burst"){
+      if(br.type==="gunner"||br.type==="burst"||br.type==="mover"){
         br.shot-=dt;
         if(br.shot<=0){
           const supportCount=nearbySupports(state,br);
@@ -150,9 +184,12 @@ window.createRogueEnemies=({W,BRICK_TOP,rand,flash})=>{
           if(br.type==="gunner"){
             br.shot=rand(2.1,3.7)*waveFactor*supportFactor;
             fireGunner(state,br,buffed);
-          }else{
+          }else if(br.type==="burst"){
             br.shot=rand(3.2,4.8)*waveFactor*supportFactor;
             fireBurst(state,br,buffed);
+          }else{
+            br.shot=rand(2.5,3.8)*waveFactor*supportFactor;
+            fireMover(state,br,buffed);
           }
         }
       }else if(br.type==="boss"){
