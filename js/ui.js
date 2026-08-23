@@ -40,6 +40,73 @@ window.createRogueUI=({canvas,ctx,W,H,TOP_SAFE,BRICK_TOP,isTouch,upgrades,getFla
     ctx.roundRect?ctx.roundRect(x,y,w,h,r):ctx.rect(x,y,w,h);
   }
 
+  function drawBrickBody(b){
+    const palette={
+      normal:"#1d4ed8",
+      gunner:"#7f1d1d",
+      burst:"#9f1239",
+      armor:"#334155",
+      support:"#0f766e",
+      splitter:"#6d28d9",
+      bomber:"#b45309",
+      mover:"#0369a1",
+      splitling:"#8b5cf6",
+      boss:"#6b21a8"
+    };
+
+    if(b.type==="support"){
+      ctx.save();
+      ctx.shadowBlur=18;ctx.shadowColor="#2dd4bf";
+      ctx.strokeStyle="rgba(45,212,191,.48)";ctx.lineWidth=2;
+      rr(b.x-3,b.y-3,b.w+6,b.h+6,9);ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.fillStyle=palette[b.type]||palette.normal;
+    rr(b.x,b.y,b.w,b.h,b.type==="boss"?14:b.type==="splitling"?5:7);ctx.fill();
+
+    const cx=b.x+b.w/2,cy=b.y+b.h/2;
+    ctx.save();
+    ctx.lineWidth=2;
+    ctx.lineCap="round";
+
+    if(b.type==="gunner"){
+      ctx.fillStyle="#fecaca";ctx.beginPath();ctx.arc(cx,cy-1,5,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle="#fca5a5";ctx.beginPath();ctx.moveTo(cx,cy+4);ctx.lineTo(cx,cy+10);ctx.stroke();
+    }else if(b.type==="burst"){
+      ctx.fillStyle="#fecaca";
+      [-8,0,8].forEach(dx=>{ctx.beginPath();ctx.arc(cx+dx,cy+1,3.2,0,Math.PI*2);ctx.fill()});
+      ctx.strokeStyle="rgba(254,202,202,.75)";
+      ctx.beginPath();ctx.moveTo(cx,cy+2);ctx.lineTo(cx-10,cy+9);ctx.moveTo(cx,cy+2);ctx.lineTo(cx+10,cy+9);ctx.stroke();
+    }else if(b.type==="armor"){
+      ctx.fillStyle="#94a3b8";ctx.fillRect(b.x+3,b.y+b.h-8,b.w-6,6);
+      ctx.strokeStyle="#cbd5e1";
+      for(let x=b.x+9;x<b.x+b.w-5;x+=13){ctx.beginPath();ctx.moveTo(x,b.y+b.h-8);ctx.lineTo(x-5,b.y+b.h-2);ctx.stroke()}
+    }else if(b.type==="support"){
+      ctx.strokeStyle="#99f6e4";ctx.lineWidth=3;
+      ctx.beginPath();ctx.moveTo(cx-8,cy);ctx.lineTo(cx+8,cy);ctx.moveTo(cx,cy-8);ctx.lineTo(cx,cy+8);ctx.stroke();
+    }else if(b.type==="splitter"){
+      ctx.strokeStyle="#ddd6fe";ctx.beginPath();ctx.moveTo(cx,cy-9);ctx.lineTo(cx-3,cy-2);ctx.lineTo(cx+3,cy+3);ctx.lineTo(cx,cy+10);ctx.stroke();
+      ctx.fillStyle="#ddd6fe";ctx.beginPath();ctx.arc(cx-11,cy,3,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(cx+11,cy,3,0,Math.PI*2);ctx.fill();
+    }else if(b.type==="bomber"){
+      ctx.strokeStyle="#fde68a";ctx.beginPath();ctx.arc(cx,cy+2,7,0,Math.PI*2);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(cx+4,cy-5);ctx.lineTo(cx+9,cy-9);ctx.lineTo(cx+13,cy-7);ctx.stroke();
+    }else if(b.type==="mover"){
+      ctx.fillStyle="#bae6fd";
+      ctx.beginPath();ctx.moveTo(cx-18,cy);ctx.lineTo(cx-10,cy-6);ctx.lineTo(cx-10,cy+6);ctx.closePath();ctx.fill();
+      ctx.beginPath();ctx.moveTo(cx+18,cy);ctx.lineTo(cx+10,cy-6);ctx.lineTo(cx+10,cy+6);ctx.closePath();ctx.fill();
+      ctx.strokeStyle="#e0f2fe";ctx.beginPath();ctx.moveTo(cx-7,cy);ctx.lineTo(cx+7,cy);ctx.stroke();
+    }else if(b.type==="splitling"){
+      ctx.strokeStyle="#ede9fe";ctx.beginPath();ctx.moveTo(cx-5,cy-4);ctx.lineTo(cx+5,cy+4);ctx.moveTo(cx+5,cy-4);ctx.lineTo(cx-5,cy+4);ctx.stroke();
+    }else if(b.type==="normal"){
+      ctx.fillStyle="rgba(191,219,254,.7)";ctx.fillRect(b.x+b.w*.28,cy-2,b.w*.44,4);
+    }else if(b.type==="boss"){
+      ctx.fillStyle="#f5d0fe";ctx.font="900 18px system-ui";ctx.textAlign="center";
+      ctx.fillText("BOSS",cx,cy+6);
+    }
+    ctx.restore();
+  }
+
   function draw(state){
     ctx.clearRect(0,0,W,H);
     ctx.fillStyle="#050810";ctx.fillRect(0,0,W,H);
@@ -61,19 +128,12 @@ window.createRogueUI=({canvas,ctx,W,H,TOP_SAFE,BRICK_TOP,isTouch,upgrades,getFla
     }
 
     for(const b of state.bricks){
-      ctx.fillStyle=b.type==="boss"?"#6b21a8":b.type==="enemy"?"#7f1d1d":b.type==="tank"?"#334155":"#1d4ed8";
-      rr(b.x,b.y,b.w,b.h,b.type==="boss"?14:7);ctx.fill();
+      drawBrickBody(b);
       if(b.poisonTimer>0){
         ctx.strokeStyle="#4ade80";ctx.lineWidth=2;rr(b.x+1,b.y+1,b.w-2,b.h-2,b.type==="boss"?13:6);ctx.stroke();ctx.lineWidth=1;
       }
       ctx.fillStyle="rgba(255,255,255,.13)";
-      ctx.fillRect(b.x+5,b.y+5,(b.w-10)*Math.max(0,b.hp/b.maxHp),4);
-      if(b.type==="enemy"){
-        ctx.fillStyle="#fecaca";ctx.beginPath();ctx.arc(b.x+b.w/2,b.y+b.h/2,5,0,Math.PI*2);ctx.fill();
-      }else if(b.type==="boss"){
-        ctx.fillStyle="#f5d0fe";ctx.font="900 18px system-ui";ctx.textAlign="center";
-        ctx.fillText("BOSS",b.x+b.w/2,b.y+b.h/2+6);
-      }
+      ctx.fillRect(b.x+5,b.y+5,Math.max(0,(b.w-10)*Math.max(0,b.hp/b.maxHp)),4);
     }
 
     for(const o of state.orbs){
@@ -94,8 +154,13 @@ window.createRogueUI=({canvas,ctx,W,H,TOP_SAFE,BRICK_TOP,isTouch,upgrades,getFla
     }
 
     for(const q of state.bullets){
-      ctx.shadowBlur=q.boss?18:12;ctx.shadowColor=q.boss?"#f0abfc":"#ef4444";ctx.fillStyle=q.boss?"#e879f9":"#fb7185";
-      ctx.beginPath();ctx.arc(q.x,q.y,q.r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+      const aura=q.aura==="boss"?"#c084fc":q.aura==="burst"?"#fb923c":q.aura==="buffed"?"#facc15":"#ef4444";
+      ctx.shadowBlur=q.boss?20:q.aura==="buffed"?18:13;
+      ctx.shadowColor=aura;
+      ctx.fillStyle="#ff4d5e";
+      ctx.beginPath();ctx.arc(q.x,q.y,q.r,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle="#fecdd3";ctx.beginPath();ctx.arc(q.x-q.r*.18,q.y-q.r*.18,Math.max(1.5,q.r*.32),0,Math.PI*2);ctx.fill();
+      ctx.shadowBlur=0;
     }
 
     for(const q of state.splitShots){
