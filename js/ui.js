@@ -109,11 +109,11 @@ window.createRogueUI=({canvas,ctx,W,H,TOP_SAFE,BRICK_TOP,isTouch,upgrades,getFla
     }
 
     const p=state.paddle;
-    const guard=state.guardTimer>0||state.hitInvulnTimer>0;
+    const invulnerable=state.hitInvulnTimer>0;
     const barrier=state.barrierLevel>0&&state.barrierActive;
 
     if(state.ghost){
-      const gw=state.ghostBallWidth||210,gx=p.x+p.w/2-gw/2;
+      const gw=state.ghostBallWidth||170,gx=p.x+p.w/2-gw/2;
       ctx.save();
       ctx.globalAlpha=.24;
       ctx.shadowBlur=16;ctx.shadowColor="#67e8f9";ctx.fillStyle="#67e8f9";
@@ -123,9 +123,9 @@ window.createRogueUI=({canvas,ctx,W,H,TOP_SAFE,BRICK_TOP,isTouch,upgrades,getFla
       ctx.restore();ctx.lineWidth=1;ctx.shadowBlur=0;
     }
 
-    ctx.shadowBlur=guard?30:barrier?24:18;
-    ctx.shadowColor=guard?"#67e8f9":barrier?"#60a5fa":"#a78bfa";
-    ctx.fillStyle=guard?"#a5f3fc":barrier?"#bfdbfe":"#c4b5fd";
+    ctx.shadowBlur=invulnerable?30:barrier?24:18;
+    ctx.shadowColor=invulnerable?"#67e8f9":barrier?"#60a5fa":"#a78bfa";
+    ctx.fillStyle=invulnerable?"#a5f3fc":barrier?"#bfdbfe":"#c4b5fd";
     rr(p.x,p.y,p.w,p.h,8);ctx.fill();ctx.shadowBlur=0;
     if(barrier){
       ctx.strokeStyle="rgba(96,165,250,.7)";ctx.lineWidth=2;
