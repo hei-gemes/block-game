@@ -37,6 +37,35 @@ window.createRogueCombat=({W,H,TOP_SAFE,MAX_HP,AUTO_COLLECT_SECONDS,clamp,rand,f
     br.poisonTimer=3;
   }
 
+  function rewardFor(type){
+    const score={normal:75,gunner:180,burst:220,armor:150,support:185,splitter:170,bomber:165,mover:135,splitling:25};
+    const xp={normal:4,gunner:8,burst:9,armor:7,support:8,splitter:7,bomber:7,mover:6,splitling:1};
+    return{score:score[type]??75,xp:xp[type]??4};
+  }
+
+  function spawnSplitlings(state,br){
+    const w=Math.max(20,br.w*.42),h=Math.max(14,br.h*.72),gap=5;
+    const total=w*2+gap,start=br.x+br.w/2-total/2,y=br.y+(br.h-h)/2;
+    for(let i=0;i<2;i++){
+      const x=clamp(start+i*(w+gap),6,W-w-6);
+      state.bricks.push({x,y,w,h,hp:1,maxHp:1,type:"splitling",shot:0,poisonTimer:0,poisonTick:1});
+    }
+    particles(state,br.x+br.w/2,br.y+br.h/2,10);
+  }
+
+  function bomberBlast(state,br){
+    const cx=br.x+br.w/2,cy=br.y+br.h/2,radius=Math.max(110,br.w*1.65);
+    particles(state,cx,cy,18);
+    const targets=[...state.bricks];
+    for(const target of targets){
+      if(target.type==="boss")continue;
+      const tx=target.x+target.w/2,ty=target.y+target.h/2;
+      if(Math.hypot(tx-cx,ty-cy)>radius)continue;
+      const blastDamage=Math.max(2,Math.ceil(target.maxHp*.5));
+      damageBrick(state,target,blastDamage,tx,ty,false);
+    }
+  }
+
   function onBrickDestroyed(state,br){
     if(br.type==="boss"){
       state.score+=2000;
@@ -52,10 +81,18 @@ window.createRogueCombat=({W,H,TOP_SAFE,MAX_HP,AUTO_COLLECT_SECONDS,clamp,rand,f
       state.bossRewardPending=true;
       return;
     }
-    state.score+=br.type==="enemy"?180:br.type==="tank"?120:75;
-    dropOrb(state,br.x+br.w/2,br.y+br.h/2,br.type==="enemy"?8:br.type==="tank"?6:4);
-    if(Math.random()<.055)dropHeal(state,br.x+br.w/2,br.y+br.h/2);
-    if(Math.random()<.035)dropAutoCollect(state,br.x+br.w/2,br.y+br.h/2);
+
+    const reward=rewardFor(br.type);
+    state.score+=reward.score;
+    if(reward.xp>0)dropOrb(state,br.x+br.w/2,br.y+br.h/2,reward.xp);
+
+    if(br.type!=="splitling"){
+      if(Math.random()<.055)dropHeal(state,br.x+br.w/2,br.y+br.h/2);
+      if(Math.random()<.035)dropAutoCollect(state,br.x+br.w/2,br.y+br.h/2);
+    }
+
+    if(br.type==="splitter")spawnSplitlings(state,br);
+    else if(br.type==="bomber")bomberBlast(state,br);
   }
 
   function damageBrick(state,br,amount,x,y,withPoison=true){
@@ -65,8 +102,8 @@ window.createRogueCombat=({W,H,TOP_SAFE,MAX_HP,AUTO_COLLECT_SECONDS,clamp,rand,f
     if(withPoison)applyPoison(state,br);
     particles(state,x??br.x+br.w/2,y??br.y+br.h/2,4);
     if(br.hp<=0){
-      onBrickDestroyed(state,br);
       state.bricks.splice(idx,1);
+      onBrickDestroyed(state,br);
       return true;
     }
     return false;
@@ -82,6 +119,12 @@ window.createRogueCombat=({W,H,TOP_SAFE,MAX_HP,AUTO_COLLECT_SECONDS,clamp,rand,f
     else if(m===right){b.x=br.x+br.w+b.r+1;b.vx=Math.abs(b.vx)}
     else if(m===top){b.y=br.y-b.r-1;b.vy=-Math.abs(b.vy)}
     else{b.y=br.y+br.h+b.r+1;b.vy=Math.abs(b.vy)}
+  }
+
+  function armorAdjustedDamage(br,b,damage){
+    if(br.type!=="armor")return damage;
+    const fromBelow=b.vy<0&&b.y>=br.y+br.h*.45;
+    return fromBelow?Math.max(.35,damage*.35):damage;
   }
 
   function spawnSplitBurst(state,b){
@@ -141,19 +184,15 @@ window.createRogueCombat=({W,H,TOP_SAFE,MAX_HP,AUTO_COLLECT_SECONDS,clamp,rand,f
   }
 
   function updatePoison(state,dt){
-    for(let i=state.bricks.length-1;i>=0;i--){
-      const br=state.bricks[i];
+    const bricks=[...state.bricks];
+    for(const br of bricks){
+      if(!state.bricks.includes(br))continue;
       if(br.poisonTimer>0&&state.poisonLevel>0){
         br.poisonTimer=Math.max(0,br.poisonTimer-dt);
         br.poisonTick-=dt;
         if(br.poisonTick<=0){
           br.poisonTick+=1;
-          br.hp-=state.poisonLevel;
-          particles(state,br.x+br.w/2,br.y+br.h/2,3);
-          if(br.hp<=0){
-            onBrickDestroyed(state,br);
-            state.bricks.splice(i,1);
-          }
+          damageBrick(state,br,state.poisonLevel,br.x+br.w/2,br.y+br.h/2,false);
         }
       }
     }
@@ -220,7 +259,7 @@ window.createRogueCombat=({W,H,TOP_SAFE,MAX_HP,AUTO_COLLECT_SECONDS,clamp,rand,f
       if(hit>=0){
         const br=state.bricks[hit];
         b.lastBrick=br;
-        damageBrick(state,br,dmg,b.x,b.y,true);
+        damageBrick(state,br,armorAdjustedDamage(br,b,dmg),b.x,b.y,true);
         if(b.pierceLeft>0)b.pierceLeft--;
         else bounceOffBrick(b,br);
       }
